@@ -33,6 +33,13 @@ SYSTEM_INSTRUCTIONS = (
     "3. **Ejemplo de código** (usa el del contexto; si no hay, dilo)\n"
     "4. **Paso a paso**: explica el código bloque por bloque\n"
     "5. **Errores comunes** (si el contexto los menciona)\n"
+    "6. **Diagrama**: una sección \"## Diagrama\" con UN bloque fenced "
+    "```mermaid (flowchart LR) que muestre el tema central de la materia y "
+    "dónde encaja el concepto preguntado; el nodo del concepto preguntado va "
+    "resaltado con `style Id fill:#fde68a,stroke:#d97706,stroke-width:3px`.\n"
+    "Sintaxis mermaid segura: IDs de nodo simples sin espacios, etiquetas "
+    "SIEMPRE entre comillas dobles (A[\"Texto del nodo\"]), sin paréntesis ni "
+    "caracteres especiales fuera de las comillas.\n"
     "Para preguntas factuales simples (fechas, cifras, definiciones cortas), "
     "responde de forma directa y breve SIN esa estructura.\n"
     # ── Técnica: RESTRICCIONES ──
@@ -71,7 +78,13 @@ GENERAL_INSTRUCTIONS = (
     "- Formatea en Markdown: encabezados, listas y negritas para los conceptos; "
     "el código SIEMPRE en bloques fenced indicando el lenguaje (```python, "
     "```bash, etc.), nunca indentado ni en una sola línea.\n"
-    "- El código lleva comentarios en las líneas clave y no omite imports."
+    "- El código lleva comentarios en las líneas clave y no omite imports.\n"
+    "- Si te piden EXPLICAR UN CONCEPTO, termina SIEMPRE con una sección "
+    "\"## Diagrama\" con UN bloque fenced ```mermaid (flowchart LR) que "
+    "muestre el tema central de la materia y dónde encaja el concepto "
+    "preguntado; resalta su nodo con `style Id fill:#fde68a,stroke:#d97706,"
+    "stroke-width:3px`. Sintaxis segura: IDs simples sin espacios y etiquetas "
+    "SIEMPRE entre comillas dobles (A[\"Texto del nodo\"])."
 )
 
 # Prompt para el complemento de conocimiento general: el RAG ya respondió con
@@ -90,6 +103,7 @@ Restricciones obligatorias:
 - El código SIEMPRE en bloques fenced indicando el lenguaje, con comentarios
   en las líneas clave y sin omitir imports.
 - Si la respuesta de la clase ya lo cubre todo, dilo en una frase.
+- NO generes ningún diagrama mermaid: la respuesta principal ya incluye uno.
 
 Pregunta del estudiante: {question}
 
@@ -218,8 +232,8 @@ def sanity_check(answer: str, sources: list[SourceOut]) -> str:
     answer = (answer or "").strip()
     if not answer:
         return "No se pudo generar una respuesta. Inténtalo de nuevo."
-    if len(answer) > 8000:
-        answer = answer[:8000]
+    if len(answer) > 12000:  # holgura para que el diagrama mermaid no se corte
+        answer = answer[:12000]
     if sources and "[Documento:" not in answer:
         answer += "\n\nFuentes: " + ", ".join(sorted({s.filename for s in sources}))
     return answer

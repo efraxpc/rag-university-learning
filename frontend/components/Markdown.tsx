@@ -2,10 +2,11 @@
 
 // Renderiza las respuestas del asistente en Markdown:
 // - Bloques de código → vista de código (resaltado Prism + botón copiar).
+// - Bloques ```mermaid → diagrama SVG (fallback a código si la sintaxis falla).
 // - Conceptos → vista de texto estructurado (encabezados, listas, negritas,
 //   citas, tablas GFM).
 
-import { isValidElement, useState, type ReactElement, type ReactNode } from "react";
+import { isValidElement, useEffect, useId, useRef, useState, type ReactElement, type ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -115,6 +116,45 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
   );
 }
 
+// Renderiza un bloque ```mermaid como diagrama SVG. La librería se importa
+// de forma dinámica (es pesada) solo cuando aparece un diagrama. Si la
+// sintaxis generada por el LLM es inválida, cae al bloque de código normal.
+function MermaidBlock({ code }: { code: string }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [failed, setFailed] = useState(false);
+  // useId trae ':' (no válido en IDs de mermaid) → se limpia.
+  const diagramId = useId().replace(/[^a-zA-Z0-9]/g, "");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { default: mermaid } = await import("mermaid");
+        mermaid.initialize({ startOnLoad: false, theme: "default" });
+        const { svg } = await mermaid.render(`mmd-${diagramId}`, code);
+        if (!cancelled && containerRef.current) {
+          containerRef.current.innerHTML = svg;
+        }
+      } catch {
+        if (!cancelled) setFailed(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [code, diagramId]);
+
+  if (failed) {
+    return <CodeBlock language="mermaid" code={code} />;
+  }
+  return (
+    <div
+      ref={containerRef}
+      className="my-3 overflow-x-auto rounded-lg border border-slate-200 bg-white px-3 py-2 [&_svg]:mx-auto [&_svg]:max-w-full"
+    />
+  );
+}
+
 function PreBlock({ children }: { children?: ReactNode }) {
   // En Markdown un <pre> siempre envuelve un <code> (bloque fenced).
   if (isValidElement(children)) {
@@ -124,6 +164,9 @@ function PreBlock({ children }: { children?: ReactNode }) {
     }>;
     const language = /language-(\S+)/.exec(el.props.className ?? "")?.[1] ?? "";
     const code = String(el.props.children ?? "").replace(/\n$/, "");
+    if (language.toLowerCase() === "mermaid") {
+      return <MermaidBlock code={code} />;
+    }
     return <CodeBlock language={language} code={code} />;
   }
   return <pre>{children}</pre>;
