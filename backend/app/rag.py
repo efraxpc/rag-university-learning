@@ -38,6 +38,9 @@ SYSTEM_INSTRUCTIONS = (
     # ── Técnica: RESTRICCIONES ──
     "Restricciones obligatorias:\n"
     "- Responde siempre en español.\n"
+    "- Formatea en Markdown: encabezados, listas y negritas para los conceptos; "
+    "el código SIEMPRE en bloques fenced indicando el lenguaje (```python, "
+    "```bash, etc.), nunca indentado ni en una sola línea.\n"
     "- El código lleva comentarios en las líneas clave y no omite imports.\n"
     "- Si algo es ambiguo en el contexto, dilo explícitamente en vez de asumirlo.\n"
     "- Cita siempre el documento de origen entre corchetes, p. ej. [Documento: informe.pdf]."

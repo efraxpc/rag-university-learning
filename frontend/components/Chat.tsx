@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ask, type Source } from "../lib/api";
+import Markdown from "./Markdown";
 
 type Message = {
   role: "user" | "assistant";
@@ -142,7 +143,11 @@ export default function Chat({ onToggleSidebar }: { onToggleSidebar: () => void 
                       : "max-w-[80%] rounded-2xl rounded-bl-md border border-slate-200 bg-white px-4 py-2.5 text-sm shadow-sm"
                   }
                 >
-                  <p className="whitespace-pre-wrap">{m.content}</p>
+                  {m.role === "user" ? (
+                    <p className="whitespace-pre-wrap">{m.content}</p>
+                  ) : (
+                    <Markdown content={m.content} />
+                  )}
                   {m.sources && m.sources.length > 0 && (
                     <SourcesList sources={m.sources} />
                   )}
