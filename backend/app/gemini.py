@@ -67,15 +67,18 @@ def vector_to_literal(vec: list[float]) -> str:
     return "[" + ",".join(f"{x:.6f}" for x in vec) + "]"
 
 
-_REWRITE_PROMPT = """Eres un optimizador de búsqueda semántica para un sistema RAG.
-1. Reescribe la pregunta del usuario para que sea clara, autocontenida y eficaz
-   para búsqueda vectorial (corrige ambigüedades, typos y lenguaje vago).
-2. Genera {n} variantes parafraseadas de la misma (multi-query expansion).
+_REWRITE_PROMPT = """You are a semantic search optimizer for a RAG system.
+1. Rewrite the user's question so it is clear, self-contained and effective
+   for vector search (fix ambiguities, typos and vague wording).
+2. Generate {n} paraphrased variants of it (multi-query expansion).
 
-Responde SOLO con un JSON válido, sin texto adicional ni fences:
-{{"rewritten": "pregunta reescrita", "variants": ["variante 1", "variante 2"]}}
+Keep the rewritten question and the variants in SPANISH (the indexed
+documents are in Spanish).
 
-Pregunta del usuario: {question}"""
+Reply ONLY with valid JSON, no extra text and no fences:
+{{"rewritten": "rewritten question", "variants": ["variant 1", "variant 2"]}}
+
+User question: {question}"""
 
 
 def rewrite_and_expand(question: str, n_variants: int) -> dict:
