@@ -44,9 +44,17 @@ class Settings(BaseSettings):
     # HNSW/IVFFlat a 2000 dims → 1536 es el máximo seguro recomendado.
     embedding_dims: int = 1536
     gen_model: str = "gemini-2.5-flash"
+    # Modelo de conocimiento general: complementa la respuesta RAG cuando el
+    # tema SÍ está en los documentos y responde solo cuando NO está. Si el
+    # modelo no está disponible se cae a gen_model (ver routers/query.py).
+    general_model: str = "gemini-3.1-pro-preview"
 
     # RAG
     top_k: int = 4
+    # Umbral de distancia coseno para decidir si los documentos responden a la
+    # pregunta: si el mejor match la supera, se considera que la respuesta NO
+    # está en el RAG y se contesta solo con conocimiento general.
+    max_distance: float = 0.6
     # 4096: las explicaciones estructuradas con código necesitan más tokens.
     max_output_tokens: int = 4096
 

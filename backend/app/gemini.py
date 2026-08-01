@@ -49,9 +49,11 @@ def embed_query(text: str) -> list[float]:
     return embed_texts([text], task_type="RETRIEVAL_QUERY")[0]
 
 
-def generate(prompt: str) -> str:
+def generate(prompt: str, model: str | None = None) -> str:
+    """Genera texto. `model` permite usar otro modelo distinto de GEN_MODEL
+    (p. ej. el de conocimiento general, GENERAL_MODEL)."""
     res = get_client().models.generate_content(
-        model=settings.gen_model,
+        model=model or settings.gen_model,
         contents=prompt,
         config=types.GenerateContentConfig(
             temperature=0.2, max_output_tokens=settings.max_output_tokens

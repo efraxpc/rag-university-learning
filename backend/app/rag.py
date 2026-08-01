@@ -46,6 +46,49 @@ SYSTEM_INSTRUCTIONS = (
     "- Cita siempre el documento de origen entre corchetes, p. ej. [Documento: informe.pdf]."
 )
 
+# Instrucciones para responder SOLO con conocimiento general (cuando la
+# respuesta no está en los documentos). Mismo rol/audiencia/formato que
+# SYSTEM_INSTRUCTIONS, pero sin grounding y avisando del origen.
+GENERAL_INSTRUCTIONS = (
+    "Actúa como profesor universitario senior de programación, experto en "
+    "explicar conceptos con ejemplos de código ejecutables. Responde desde tu "
+    "CONOCIMIENTO GENERAL: la pregunta no está cubierta por los documentos de "
+    "la clase.\n"
+    "Tu audiencia son estudiantes universitarios con conocimientos BÁSICOS de "
+    "programación: evita jerga sin explicar y define cada término técnico la "
+    "primera vez que lo uses.\n"
+    "Empieza SIEMPRE la respuesta con esta nota en cursiva:\n"
+    "*Esta respuesta no proviene de los documentos de la clase; es conocimiento "
+    "general de Gemini.*\n"
+    "Restricciones obligatorias:\n"
+    "- Responde siempre en español.\n"
+    "- Formatea en Markdown: encabezados, listas y negritas para los conceptos; "
+    "el código SIEMPRE en bloques fenced indicando el lenguaje (```python, "
+    "```bash, etc.), nunca indentado ni en una sola línea.\n"
+    "- El código lleva comentarios en las líneas clave y no omite imports."
+)
+
+# Prompt para el complemento de conocimiento general: el RAG ya respondió con
+# los documentos y se pide SOLO información adicional no cubierta.
+_COMPLEMENT_PROMPT = """Actúa como profesor universitario senior de programación.
+Un sistema RAG ya respondió la pregunta del estudiante usando los documentos de
+la clase (respuesta incluida abajo). Tu tarea es COMPLEMENTARLA con conocimiento
+general que NO esté cubierto: profundización, buenas prácticas, ejemplos
+adicionales o contexto actualizado. No repitas lo que ya dice la respuesta.
+
+Restricciones obligatorias:
+- Responde siempre en español y en Markdown.
+- El código SIEMPRE en bloques fenced indicando el lenguaje, con comentarios
+  en las líneas clave y sin omitir imports.
+- Si la respuesta de la clase ya lo cubre todo, dilo en una frase.
+
+Pregunta del estudiante: {question}
+
+Respuesta basada en los documentos de la clase:
+{rag_answer}
+
+Complemento (solo información adicional):"""
+
 # Query unificada small-to-big y modo clásico:
 # - SMALL_TO_BIG: los chunks pequeños se usan para buscar (precisión) pero se
 #   devuelve el contenido del parent (contexto grande) via LEFT JOIN + COALESCE.
@@ -137,6 +180,25 @@ def build_prompt(question: str, sources: list[SourceOut]) -> str:
         f"Pregunta: {question}\n\n"
         f"Respuesta:"
     )
+
+
+def has_answer(sources: list[SourceOut]) -> bool:
+    """Decide si los documentos responden a la pregunta.
+
+    True si el mejor match tiene distancia coseno <= MAX_DISTANCE; si la
+    supera, se considera que la respuesta NO está en el RAG.
+    """
+    return bool(sources) and min(s.distance for s in sources) <= settings.max_distance
+
+
+def build_general_prompt(question: str) -> str:
+    """Prompt para responder SOLO con conocimiento general (sin contexto)."""
+    return f"{GENERAL_INSTRUCTIONS}\n\nPregunta: {question}\n\nRespuesta:"
+
+
+def build_complement_prompt(question: str, rag_answer: str) -> str:
+    """Prompt para complementar la respuesta RAG con conocimiento general."""
+    return _COMPLEMENT_PROMPT.format(question=question, rag_answer=rag_answer)
 
 
 def sanity_check(answer: str, sources: list[SourceOut]) -> str:
