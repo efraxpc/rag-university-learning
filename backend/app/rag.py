@@ -258,6 +258,25 @@ _SUMMARY_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Reglas de la sección final "Ejemplo de código": solo se incluye en las
+# llamadas que producen el resumen FINAL (caso 1 grupo y los reduces), no en
+# los maps parciales — un ejemplo por bloque sería ruido a fusionar.
+_CODE_EXAMPLE_RULES = (
+    "5. **Ejemplo de código** (una frase explicando qué demuestra + UN "
+    "bloque de código)\n"
+    "Rules for the code example section:\n"
+    "- Language: the one used in the class (infer it from the content; if "
+    "unclear, use Python).\n"
+    "- ONE self-contained, runnable code block in a fenced Markdown block "
+    "with the language tag (e.g. ```python).\n"
+    "- The example must APPLY the concepts of the summary: a small program "
+    "that ties together the main ideas.\n"
+    "- Detailed for learning: comment almost every line in SPANISH, "
+    "explaining what it does and which concept it illustrates.\n"
+    "- Base it ONLY on the provided content: do not use libraries or "
+    "concepts that do not appear in it."
+)
+
 SUMMARY_INSTRUCTIONS = (
     "Act as a senior university programming professor summarizing a class "
     "document for students with BASIC programming knowledge: avoid "
@@ -286,6 +305,7 @@ with EXACTLY these headings:
 3. **Puntos clave por tema** (bullets con negrita para los conceptos; define
    cada término técnico con palabras simples)
 4. **Conclusiones**
+{code_rules}
 
 Mandatory rules:
 - Remove duplicates and keep a logical order; do not add outside knowledge.
@@ -308,6 +328,7 @@ these headings:
 3. **Puntos clave por tema** (bullets con negrita para los conceptos; define
    cada término técnico con palabras simples)
 4. **Conclusiones**
+{code_rules}
 
 Mandatory rules:
 - Remove duplicates and keep a logical order; do not add outside knowledge.
@@ -379,10 +400,17 @@ def resolve_summary_document(
     return None
 
 
-def build_summary_prompt(filename: str, content: str) -> str:
-    """Prompt del map: resumir un bloque (o el documento corto completo)."""
+def build_summary_prompt(filename: str, content: str, final: bool = False) -> str:
+    """Prompt del map: resumir un bloque (o el documento corto completo).
+
+    `final=True` añade la sección "Ejemplo de código": solo cuando la llamada
+    produce el resumen final (documento corto de 1 grupo), nunca en los maps.
+    """
+    prompt = SUMMARY_INSTRUCTIONS
+    if final:
+        prompt += "\n" + _CODE_EXAMPLE_RULES
     return (
-        f"{SUMMARY_INSTRUCTIONS}\n\n"
+        f"{prompt}\n\n"
         f"Content of the class document ({filename}):\n{content}\n\n"
         f"Summary:"
     )
@@ -448,7 +476,9 @@ def build_reduce_prompt(filename: str, partials: list[str]) -> str:
     joined = "\n\n---\n\n".join(
         f"Part {i}:\n{p}" for i, p in enumerate(partials, 1)
     )
-    return _REDUCE_PROMPT.format(filename=filename, partials=joined)
+    return _REDUCE_PROMPT.format(
+        filename=filename, partials=joined, code_rules=_CODE_EXAMPLE_RULES
+    )
 
 
 def summarize_document(document_id: int) -> str:
@@ -492,7 +522,9 @@ def summarize_document(document_id: int) -> str:
     )
 
     if len(groups) == 1:
-        summary = llm.generate(build_summary_prompt(row["filename"], groups[0]))
+        summary = llm.generate(
+            build_summary_prompt(row["filename"], groups[0], final=True)
+        )
     else:
         # Map con FAST_MODEL (volumen barato); reduce con GEN_MODEL (calidad).
         with ThreadPoolExecutor(max_workers=settings.summary_max_workers) as pool:
@@ -521,7 +553,7 @@ def build_multi_reduce_prompt(items: list[tuple[str, str]]) -> str:
     joined = "\n\n---\n\n".join(
         f"Document: {filename}\nSummary:\n{summary}" for filename, summary in items
     )
-    return _MULTI_REDUCE_PROMPT.format(items=joined)
+    return _MULTI_REDUCE_PROMPT.format(items=joined, code_rules=_CODE_EXAMPLE_RULES)
 
 
 def summarize_documents(document_ids: list[int]) -> str:
