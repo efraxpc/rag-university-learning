@@ -170,6 +170,23 @@ resource "google_secret_manager_secret_version" "gemini_api_key" {
   secret_data = var.gemini_api_key
 }
 
+# API directa de Anthropic (LLM_PROVIDER=anthropic, ver backend/app/llm.py).
+# El secreto se crea siempre; la versión solo si se proporciona la key (si se
+# usa LLM_PROVIDER=vertex no hace falta).
+resource "google_secret_manager_secret" "anthropic_api_key" {
+  secret_id = "anthropic-api-key"
+  replication {
+    auto {}
+  }
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_secret_manager_secret_version" "anthropic_api_key" {
+  count       = var.anthropic_api_key != "" ? 1 : 0
+  secret      = google_secret_manager_secret.anthropic_api_key.id
+  secret_data = var.anthropic_api_key
+}
+
 resource "google_secret_manager_secret" "db_password" {
   secret_id = "db-password"
   replication {
@@ -204,7 +221,8 @@ resource "google_project_iam_member" "rag_cloudsql_client" {
   member  = "serviceAccount:${google_service_account.rag.email}"
 }
 
-# Vertex AI Model Garden: generación con Claude (AnthropicVertex, ver backend/app/llm.py).
+# Vertex AI Model Garden: generación con Claude vía Vertex (AnthropicVertex,
+# ver backend/app/llm.py). Solo se usa con LLM_PROVIDER=vertex.
 resource "google_project_iam_member" "rag_aiplatform_user" {
   project = var.project_id
   role    = "roles/aiplatform.user"
@@ -213,8 +231,9 @@ resource "google_project_iam_member" "rag_aiplatform_user" {
 
 resource "google_secret_manager_secret_iam_member" "rag_secrets" {
   for_each = {
-    gemini = google_secret_manager_secret.gemini_api_key.id
-    db     = google_secret_manager_secret.db_password.id
+    gemini    = google_secret_manager_secret.gemini_api_key.id
+    db        = google_secret_manager_secret.db_password.id
+    anthropic = google_secret_manager_secret.anthropic_api_key.id
   }
   secret_id = each.value
   role      = "roles/secretmanager.secretAccessor"

@@ -43,3 +43,10 @@ variable "gemini_api_key" {
   type        = string
   sensitive   = true
 }
+
+variable "anthropic_api_key" {
+  description = "API key de Anthropic (API directa, LLM_PROVIDER=anthropic). Se guarda en Secret Manager. Vacío si se usa LLM_PROVIDER=vertex."
+  type        = string
+  sensitive   = true
+  default     = ""
+}

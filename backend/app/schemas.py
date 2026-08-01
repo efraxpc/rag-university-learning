@@ -16,6 +16,9 @@ class DocumentOut(BaseModel):
 class QueryIn(BaseModel):
     question: str
     document_id: int | None = None  # filtro opcional → búsqueda híbrida
+    # Selección múltiple de documentos para el resumen de clase entera
+    # (botón del chat con checkboxes, incluida la opción "todas").
+    document_ids: list[int] | None = None
     # True = resumen de la clase entera por metadatos (botón del chat).
     # También se activa por keywords en la pregunta (rag.is_summary_request).
     summarize: bool = False

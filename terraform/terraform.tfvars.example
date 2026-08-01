@@ -4,3 +4,5 @@ project_id     = "tu-proyecto-gcp"
 region         = "us-central1"
 bucket_name    = "rag-docs-tu-proyecto-gcp" # globalmente único
 gemini_api_key = "tu-api-key-de-ai-studio"  # https://aistudio.google.com/apikey
+# Solo si despliegas con LLM_PROVIDER=anthropic (API directa, default):
+anthropic_api_key = "tu-api-key-de-anthropic" # https://console.anthropic.com/

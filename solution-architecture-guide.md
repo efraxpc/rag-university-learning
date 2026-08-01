@@ -57,6 +57,14 @@ Ninguna externa. (API key de AI Studio como único artefacto fuera del proyecto.
 | 8 | Generación de respuesta | **Gemini API** (gemini-2.5-flash), temperature 0.2, max_output_tokens acotado. |
 | 9 | Verificación de respuesta | Chequeos procedurales: no vacía, longitud, citas cuando hay contexto. |
 
+> **Nota (actualización)**: la generación migró de Gemini a **Anthropic
+> Claude** (`backend/app/llm.py`: claude-fable-5 para respuestas y
+> claude-haiku-4-5 para llamadas auxiliares). El módulo aplica el patrón
+> **Strategy** con doble proveedor seleccionable por `LLM_PROVIDER`:
+> `anthropic` (API directa con `ANTHROPIC_API_KEY`, **default**) o `vertex`
+> (Vertex AI Model Garden con ADC/Workload Identity). Los embeddings siguen
+> en la Gemini API (Anthropic no tiene modelo de embeddings).
+
 ## 4. Arquitectura de la solución propuesta
 
 ### 4.1. Mapeo de productos

@@ -299,6 +299,28 @@ Partial summaries:
 
 Unified summary:"""
 
+_MULTI_REDUCE_PROMPT = """Act as a senior university programming professor.
+Below are summaries of DIFFERENT class documents selected by the student.
+Merge them into ONE structured summary in Spanish and Markdown with EXACTLY
+these headings:
+1. **Idea general** (2-3 frases)
+2. **Temas tratados** (lista)
+3. **Puntos clave por tema** (bullets con negrita para los conceptos; define
+   cada término técnico con palabras simples)
+4. **Conclusiones**
+
+Mandatory rules:
+- Remove duplicates and keep a logical order; do not add outside knowledge.
+- Short sentences and simple words, for students with basic knowledge.
+- Cite the source document of each point in brackets, e.g.
+  [Documento: clase1.pdf].
+- If two documents cover the same topic, merge the content and cite both.
+
+Summaries per document:
+{items}
+
+Unified summary:"""
+
 
 def is_summary_request(question: str) -> bool:
     """True si la pregunta parece pedir un resumen del documento/clase."""
@@ -436,6 +458,57 @@ def summarize_document(document_id: int) -> str:
             {"s": summary, "id": document_id},
         )
     return summary
+
+
+def build_multi_reduce_prompt(items: list[tuple[str, str]]) -> str:
+    """Prompt del reduce multi-documento: fusionar los resúmenes de varias
+    clases seleccionadas en uno solo, citando cada fuente."""
+    joined = "\n\n---\n\n".join(
+        f"Document: {filename}\nSummary:\n{summary}" for filename, summary in items
+    )
+    return _MULTI_REDUCE_PROMPT.format(items=joined)
+
+
+def summarize_documents(document_ids: list[int]) -> str:
+    """Resumen de VARIAS clases seleccionadas por el usuario (botón del chat
+    con checkboxes / opción "todas").
+
+    Estrategia: cada documento se resume con `summarize_document` (reutiliza
+    la caché de documents.summary) y, si hay más de uno, un reduce final con
+    GEN_MODEL fusiona los resúmenes citando cada fuente. El resumen combinado
+    NO se cachea: es una sola llamada sobre resúmenes ya cacheados.
+
+    Lanza LookupError si la selección está vacía o algún documento no existe
+    o no está listo.
+    """
+    # Dedupe preservando el orden de selección.
+    ids = list(dict.fromkeys(document_ids))
+    if not ids:
+        raise LookupError("selección de documentos vacía")
+    if len(ids) == 1:
+        return summarize_document(ids[0])
+
+    # Validar que todos existen y están ready antes de gastar llamadas,
+    # y obtener los filenames para las citas en la misma consulta.
+    with get_engine().connect() as conn:
+        rows = list(
+            conn.execute(
+                text("SELECT id, filename FROM documents WHERE status = 'ready'"),
+            ).mappings()
+        )
+    names = {r["id"]: r["filename"] for r in rows}
+    missing = [i for i in ids if i not in names]
+    if missing:
+        raise LookupError(f"documentos no disponibles (no existen o no están listos): {missing}")
+
+    # Resumen por documento en paralelo (cada uno sirve su caché si existe).
+    with ThreadPoolExecutor(max_workers=settings.summary_max_workers) as pool:
+        summaries = list(pool.map(summarize_document, ids))
+
+    items = [(names[i], s) for i, s in zip(ids, summaries)]
+
+    logger.info("resumen multi-documento: %d clases → reduce final", len(ids))
+    return llm.generate(build_multi_reduce_prompt(items))
 
 
 def sanity_check(answer: str, sources: list[SourceOut]) -> str:

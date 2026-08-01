@@ -44,6 +44,8 @@ spec:
               value: "${GENERAL_MODEL}"
             - name: FAST_MODEL
               value: "${FAST_MODEL}"
+            - name: LLM_PROVIDER
+              value: "${LLM_PROVIDER}"
             - name: ANTHROPIC_VERTEX_REGION
               value: "${ANTHROPIC_VERTEX_REGION}"
             - name: SMALL_TO_BIG
@@ -71,6 +73,15 @@ spec:
                 secretKeyRef:
                   name: rag-secrets
                   key: GEMINI_API_KEY
+            # Solo presente si LLM_PROVIDER=anthropic (deploy.sh la añade a
+            # rag-secrets); optional para que el mismo manifiesto sirva con
+            # LLM_PROVIDER=vertex sin esa clave en el Secret.
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: rag-secrets
+                  key: ANTHROPIC_API_KEY
+                  optional: true
             - name: DB_PASS
               valueFrom:
                 secretKeyRef:

@@ -1,8 +1,8 @@
 """Cliente de embeddings con la Gemini API (SOLO vectorización).
 
-La generación de texto vive en app/llm.py (Anthropic Claude vía Vertex AI
-Model Garden); Anthropic no tiene modelo de embeddings, así que la
-vectorización se mantiene aquí:
+La generación de texto vive en app/llm.py (Anthropic Claude, vía API directa
+o Vertex AI Model Garden según LLM_PROVIDER); Anthropic no tiene modelo de
+embeddings, así que la vectorización se mantiene aquí:
 
 - Por defecto: AI Studio (free tier) con API key.
 - Vertex AI: poner GOOGLE_GENAI_USE_VERTEXAI=true — mismo SDK, autenticación

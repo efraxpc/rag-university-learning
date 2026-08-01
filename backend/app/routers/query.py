@@ -2,8 +2,10 @@
 
 Estrategia de respuesta:
 - Si es petición de resumen de la clase entera (flag `summarize` del botón o
-  keywords en la pregunta): map-reduce por metadatos sobre el documento
-  resuelto, con caché en documents.summary (sin búsqueda vectorial).
+  keywords en la pregunta): map-reduce por metadatos sobre los documentos
+  seleccionados (`document_ids`, uno o varios con reduce final) o el
+  documento resuelto por metadatos, con caché en documents.summary (sin
+  búsqueda vectorial).
 - Si los documentos responden a la pregunta (distancia <= MAX_DISTANCE):
   respuesta basada en el contenido de la clase + complemento de conocimiento
   general con GENERAL_MODEL.
@@ -44,6 +46,20 @@ def query(body: QueryIn) -> QueryOut:
     # Rama de resumen de clase entera (por metadatos, sin búsqueda vectorial):
     # botón del chat (flag) o keywords en la pregunta.
     if body.summarize or rag.is_summary_request(question):
+        # Selección múltiple de clases (checkboxes del chat, incluida "todas").
+        if body.document_ids:
+            try:
+                answer = rag.summarize_documents(body.document_ids)
+            except LookupError as exc:
+                raise HTTPException(
+                    404, "Algún documento seleccionado no existe o aún no está listo."
+                ) from exc
+            except Exception as exc:
+                logger.exception("Error generando el resumen")
+                raise HTTPException(
+                    502, f"Error generando el resumen: {exc}"
+                ) from exc
+            return QueryOut(answer=rag.sanity_check(answer, []), sources=[])
         resolved = rag.resolve_summary_document(question, body.document_id)
         if resolved is not None:
             doc_id, _filename = resolved

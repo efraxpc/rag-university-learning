@@ -1,13 +1,25 @@
-"""Cliente de generación LLM: Anthropic Claude vía Vertex AI Model Garden.
+"""Cliente de generación LLM: Anthropic Claude con doble proveedor.
+
+Patrón Strategy: dos estrategias intercambiables de conexión, seleccionadas
+en runtime por `LLM_PROVIDER` (factory `_build_client`):
+
+- `anthropic` (DEFAULT): API directa de Anthropic — requiere
+  `ANTHROPIC_API_KEY`.
+- `vertex`: Vertex AI Model Garden — autenticación por ADC en local
+  (gcloud auth application-default login) / Workload Identity en GKE;
+  requiere el modelo habilitado en Model Garden del proyecto y el rol
+  roles/aiplatform.user sobre la identidad usada.
+
+Ambos clientes del SDK `anthropic` exponen la misma interfaz
+(`messages.create`), así que `generate()`/`rewrite_and_expand()` y sus
+consumidores (rag.py, routers/query.py) no conocen el proveedor activo.
 
 - Modelos: GEN_MODEL (claude-fable-5) para las respuestas finales,
   GENERAL_MODEL para el conocimiento general y FAST_MODEL
   (claude-haiku-4-5) para llamadas auxiliares de volumen (query
-  rewrite/expansion y el map paralelo de resúmenes).
-- Autenticación: ADC en local (gcloud auth application-default login) y
-  Workload Identity en GKE — mismo patrón que el resto del proyecto GCP.
-- Requiere el modelo habilitado en Model Garden del proyecto y el rol
-  roles/aiplatform.user sobre la identidad usada.
+  rewrite/expansion y el map paralelo de resúmenes). Los IDs pueden variar
+  según el proveedor (Vertex admite sufijos `@fecha`): se ajustan por
+  variables de entorno.
 
 Los embeddings NO pasan por aquí: siguen en app/gemini.py (Anthropic no
 tiene modelo de embeddings).
@@ -17,7 +29,7 @@ import json
 import logging
 import threading
 
-from anthropic import AnthropicVertex
+from anthropic import Anthropic, AnthropicVertex
 
 from .config import settings
 
@@ -29,13 +41,31 @@ logger = logging.getLogger("rag.llm")
 _tls = threading.local()
 
 
-def get_client() -> AnthropicVertex:
-    client = getattr(_tls, "client", None)
-    if client is None:
-        client = AnthropicVertex(
+def _build_client() -> Anthropic | AnthropicVertex:
+    """Factory del patrón Strategy: construye la estrategia de conexión
+    elegida por `LLM_PROVIDER` (`anthropic` | `vertex`)."""
+    provider = settings.llm_provider.strip().lower()
+    if provider == "anthropic":
+        if not settings.anthropic_api_key:
+            raise RuntimeError(
+                "LLM_PROVIDER=anthropic requiere ANTHROPIC_API_KEY "
+                "(https://console.anthropic.com/) o cambia a LLM_PROVIDER=vertex"
+            )
+        return Anthropic(api_key=settings.anthropic_api_key)
+    if provider == "vertex":
+        return AnthropicVertex(
             region=settings.anthropic_vertex_region,
             project_id=settings.project_id,
         )
+    raise ValueError(
+        f"LLM_PROVIDER={settings.llm_provider!r} no válido: usa 'anthropic' o 'vertex'"
+    )
+
+
+def get_client() -> Anthropic | AnthropicVertex:
+    client = getattr(_tls, "client", None)
+    if client is None:
+        client = _build_client()
         _tls.client = client
     return client
 

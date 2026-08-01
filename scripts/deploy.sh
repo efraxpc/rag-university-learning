@@ -13,9 +13,12 @@ export REGION="${REGION:-us-central1}"
 # vector(N) de scripts/init_db.sql (HNSW soporta máx. 2000 dims).
 export EMBEDDING_MODEL="${EMBEDDING_MODEL:-text-embedding-005}"
 export EMBEDDING_DIMS="${EMBEDDING_DIMS:-1536}"
-# Generación: Anthropic Claude vía Vertex AI Model Garden (app/llm.py).
-# Requiere el modelo habilitado en Model Garden (consola) — terraform solo
-# da la API de Vertex y el rol roles/aiplatform.user a la GSA.
+# Generación: Anthropic Claude con doble proveedor (patrón Strategy,
+# backend/app/llm.py): "anthropic" = API directa (requiere el secreto
+# anthropic-api-key en Secret Manager); "vertex" = Model Garden (requiere el
+# modelo habilitado en la consola — terraform solo da la API de Vertex y el
+# rol roles/aiplatform.user a la GSA).
+export LLM_PROVIDER="${LLM_PROVIDER:-anthropic}"
 export GEN_MODEL="${GEN_MODEL:-claude-fable-5}"
 export GENERAL_MODEL="${GENERAL_MODEL:-claude-fable-5}"
 export FAST_MODEL="${FAST_MODEL:-claude-haiku-4-5}"
@@ -51,9 +54,15 @@ gcloud builds submit frontend --tag "$REPO_URL/web:1.0"     --project "$PROJECT_
 
 echo "==> [4/7] secretos de K8s desde Secret Manager..."
 kubectl create namespace rag --dry-run=client -o yaml | kubectl apply -f -
+SECRET_ARGS=(
+  --from-literal=GEMINI_API_KEY="$(gcloud secrets versions access latest --secret=gemini-api-key)"
+  --from-literal=DB_PASS="$(gcloud secrets versions access latest --secret=db-password)"
+)
+if [ "$LLM_PROVIDER" = "anthropic" ]; then
+  SECRET_ARGS+=(--from-literal=ANTHROPIC_API_KEY="$(gcloud secrets versions access latest --secret=anthropic-api-key)")
+fi
 kubectl -n rag create secret generic rag-secrets \
-  --from-literal=GEMINI_API_KEY="$(gcloud secrets versions access latest --secret=gemini-api-key)" \
-  --from-literal=DB_PASS="$(gcloud secrets versions access latest --secret=db-password)" \
+  "${SECRET_ARGS[@]}" \
   --dry-run=client -o yaml | kubectl apply -f -
 
 echo "==> [5/7] manifiestos (envsubst → kubectl apply)..."

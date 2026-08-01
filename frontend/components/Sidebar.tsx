@@ -14,6 +14,7 @@ export default function Sidebar() {
   const [docs, setDocs] = useState<Doc[]>([]);
   const [busy, setBusy] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [confirmId, setConfirmId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
@@ -51,13 +52,9 @@ export default function Sidebar() {
     }
   }
 
-  async function onDelete(doc: Doc) {
-    if (
-      !window.confirm(
-        `¿Borrar "${doc.filename}"? También se eliminarán sus chunks de la base de datos.`
-      )
-    )
-      return;
+  // Borrado con confirmación inline en la propia fila (sin modal): el 🗑
+  // muestra "¿Borrar? ✓ ✕" en la misma barra y ✓ ejecuta confirmDelete.
+  async function confirmDelete(doc: Doc) {
     setDeletingId(doc.id);
     setError(null);
     try {
@@ -67,6 +64,7 @@ export default function Sidebar() {
       setError(err instanceof Error ? err.message : "Error desconocido");
     } finally {
       setDeletingId(null);
+      setConfirmId(null);
     }
   }
 
@@ -115,27 +113,51 @@ export default function Sidebar() {
               {d.filename}
             </span>
             <span className="flex shrink-0 items-center gap-1.5">
-              <span
-                className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS[d.status].classes} ${
-                  STATUS[d.status].pulse ? "animate-pulse" : ""
-                }`}
-              >
-                {STATUS[d.status].label}
-              </span>
-              {deletingId === d.id ? (
-                <span
-                  className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-300 border-t-rose-500"
-                  title="Borrando…"
-                />
+              {confirmId === d.id && deletingId !== d.id ? (
+                // Confirmación inline en la misma barra (sin modal).
+                // Visible sin hover: no depende de group-hover.
+                <>
+                  <span className="text-[11px] font-medium text-rose-600">¿Borrar?</span>
+                  <button
+                    onClick={() => confirmDelete(d)}
+                    title="Confirmar borrado"
+                    className="text-xs text-rose-500 transition hover:text-rose-700"
+                  >
+                    ✓
+                  </button>
+                  <button
+                    onClick={() => setConfirmId(null)}
+                    title="Cancelar"
+                    className="text-xs text-slate-400 transition hover:text-slate-600"
+                  >
+                    ✕
+                  </button>
+                </>
               ) : (
-                <button
-                  onClick={() => onDelete(d)}
-                  disabled={deletingId !== null}
-                  title="Borrar documento"
-                  className="hidden text-slate-400 transition hover:text-rose-600 group-hover:inline disabled:opacity-40"
-                >
-                  🗑
-                </button>
+                <>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS[d.status].classes} ${
+                      STATUS[d.status].pulse ? "animate-pulse" : ""
+                    }`}
+                  >
+                    {STATUS[d.status].label}
+                  </span>
+                  {deletingId === d.id ? (
+                    <span
+                      className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-300 border-t-rose-500"
+                      title="Borrando…"
+                    />
+                  ) : (
+                    <button
+                      onClick={() => setConfirmId(d.id)}
+                      disabled={deletingId !== null}
+                      title="Borrar documento"
+                      className="hidden text-slate-400 transition hover:text-rose-600 group-hover:inline disabled:opacity-40"
+                    >
+                      🗑
+                    </button>
+                  )}
+                </>
               )}
             </span>
           </li>

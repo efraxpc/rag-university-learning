@@ -45,10 +45,16 @@ class Settings(BaseSettings):
     # HNSW/IVFFlat a 2000 dims → 1536 es el máximo seguro recomendado.
     embedding_dims: int = 1536
 
-    # Generación: Anthropic Claude vía Vertex AI Model Garden (SDK
-    # anthropic[vertex], ver app/llm.py). Autenticación por ADC en local
-    # (gcloud auth application-default login) / Workload Identity en GKE.
-    # Requiere el modelo habilitado en Model Garden del proyecto.
+    # Generación: Anthropic Claude con dos proveedores intercambiables
+    # (patrón Strategy, ver app/llm.py):
+    # - "anthropic" (DEFAULT): API directa de Anthropic; requiere
+    #   ANTHROPIC_API_KEY (https://console.anthropic.com/).
+    # - "vertex": Vertex AI Model Garden (SDK anthropic[vertex]);
+    #   autenticación por ADC en local (gcloud auth application-default
+    #   login) / Workload Identity en GKE, y el modelo habilitado en
+    #   Model Garden del proyecto.
+    llm_provider: str = "anthropic"
+    anthropic_api_key: str = ""  # secret: anthropic-api-key (solo provider=anthropic)
     anthropic_vertex_region: str = "global"  # Fable 5: endpoint global/us/eu
     gen_model: str = "claude-fable-5"
     # Modelo de conocimiento general: complementa la respuesta RAG cuando el

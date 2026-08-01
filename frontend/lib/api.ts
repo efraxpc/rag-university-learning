@@ -45,6 +45,7 @@ export async function ask(
   question: string,
   documentId?: number,
   summarize = false,
+  documentIds?: number[],
 ): Promise<QueryResponse> {
   const res = await fetch(`${BASE}/query`, {
     method: "POST",
@@ -52,6 +53,7 @@ export async function ask(
     body: JSON.stringify({
       question,
       document_id: documentId ?? null,
+      document_ids: documentIds ?? null,
       summarize,
     }),
   });

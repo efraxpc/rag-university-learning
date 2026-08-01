@@ -48,6 +48,7 @@ export default function Chat({ onToggleSidebar }: { onToggleSidebar: () => void 
   const [loading, setLoading] = useState(false);
   const [showSummaryMenu, setShowSummaryMenu] = useState(false);
   const [summaryDocs, setSummaryDocs] = useState<Doc[] | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const bottomRef = useRef<HTMLDivElement>(null);
   const summaryRef = useRef<HTMLDivElement>(null);
 
@@ -69,7 +70,7 @@ export default function Chat({ onToggleSidebar }: { onToggleSidebar: () => void 
 
   async function send(
     text?: string,
-    opts?: { question?: string; documentId?: number; summarize?: boolean },
+    opts?: { question?: string; documentId?: number; documentIds?: number[]; summarize?: boolean },
   ) {
     const display = (text ?? input).trim();
     if (!display || loading) return;
@@ -81,6 +82,7 @@ export default function Chat({ onToggleSidebar }: { onToggleSidebar: () => void 
         opts?.question ?? display,
         opts?.documentId,
         opts?.summarize ?? false,
+        opts?.documentIds,
       );
       setMessages((m) => [
         ...m,
@@ -99,7 +101,7 @@ export default function Chat({ onToggleSidebar }: { onToggleSidebar: () => void 
     }
   }
 
-  // Abre/cierra el selector de documentos listos para resumir.
+  // Abre/cierra el selector multi-documento de clases para resumir.
   async function toggleSummaryMenu() {
     if (showSummaryMenu) {
       setShowSummaryMenu(false);
@@ -107,6 +109,7 @@ export default function Chat({ onToggleSidebar }: { onToggleSidebar: () => void 
     }
     setShowSummaryMenu(true);
     setSummaryDocs(null);
+    setSelectedIds(new Set());
     try {
       const docs = await listDocuments();
       setSummaryDocs(docs.filter((d) => d.status === "ready"));
@@ -115,14 +118,42 @@ export default function Chat({ onToggleSidebar }: { onToggleSidebar: () => void 
     }
   }
 
-  // Lanza el resumen de la clase entera por metadatos (flag summarize).
-  function summarizeDoc(doc: Doc) {
-    setShowSummaryMenu(false);
-    send(`📝 Resumen de la clase: ${doc.filename}`, {
-      question: "Resume la clase entera",
-      documentId: doc.id,
-      summarize: true,
+  function toggleSelect(id: number) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
     });
+  }
+
+  // "Todas las clases": marca todas las ready (o limpia si ya lo están).
+  function toggleSelectAll() {
+    if (!summaryDocs) return;
+    setSelectedIds((prev) =>
+      prev.size === summaryDocs.length
+        ? new Set()
+        : new Set(summaryDocs.map((d) => d.id)),
+    );
+  }
+
+  // Lanza el resumen de las clases seleccionadas por metadatos (flag
+  // summarize + document_ids): una o varias (reduce final en el backend).
+  function summarizeSelection() {
+    if (!summaryDocs || selectedIds.size === 0) return;
+    const chosen = summaryDocs.filter((d) => selectedIds.has(d.id));
+    const names = chosen.map((d) => d.filename).join(", ");
+    setShowSummaryMenu(false);
+    send(
+      chosen.length === 1
+        ? `📝 Resumen de la clase: ${names}`
+        : `📝 Resumen de ${chosen.length} clases: ${names}`,
+      {
+        question: "Resume las clases seleccionadas",
+        documentIds: chosen.map((d) => d.id),
+        summarize: true,
+      },
+    );
   }
 
   return (
@@ -233,7 +264,7 @@ export default function Chat({ onToggleSidebar }: { onToggleSidebar: () => void 
             {showSummaryMenu && (
               <div className="absolute bottom-full left-0 z-10 mb-2 w-72 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
                 <p className="border-b border-slate-100 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                  Elige la clase a resumir
+                  Elige las clases a resumir
                 </p>
                 {summaryDocs === null ? (
                   <p className="px-3 py-3 text-sm text-slate-400">Cargando…</p>
@@ -242,19 +273,42 @@ export default function Chat({ onToggleSidebar }: { onToggleSidebar: () => void 
                     No hay documentos listos.
                   </p>
                 ) : (
-                  <ul className="max-h-56 overflow-y-auto">
-                    {summaryDocs.map((d) => (
-                      <li key={d.id}>
-                        <button
-                          onClick={() => summarizeDoc(d)}
-                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-600 transition hover:bg-violet-50 hover:text-violet-700"
-                        >
-                          <span>📄</span>
-                          <span className="truncate">{d.filename}</span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
+                  <>
+                    <label className="flex cursor-pointer items-center gap-2 border-b border-slate-100 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-violet-50">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.size === summaryDocs.length}
+                        onChange={toggleSelectAll}
+                        className="h-3.5 w-3.5 accent-violet-600"
+                      />
+                      Todas las clases
+                    </label>
+                    <ul className="max-h-56 overflow-y-auto">
+                      {summaryDocs.map((d) => (
+                        <li key={d.id}>
+                          <label className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm text-slate-600 transition hover:bg-violet-50 hover:text-violet-700">
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.has(d.id)}
+                              onChange={() => toggleSelect(d.id)}
+                              className="h-3.5 w-3.5 shrink-0 accent-violet-600"
+                            />
+                            <span>📄</span>
+                            <span className="truncate">{d.filename}</span>
+                          </label>
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="border-t border-slate-100 p-2">
+                      <button
+                        onClick={summarizeSelection}
+                        disabled={selectedIds.size === 0}
+                        className="w-full rounded-lg bg-gradient-to-r from-amber-400 to-violet-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:brightness-105 disabled:opacity-40"
+                      >
+                        ✨ Resumir ({selectedIds.size})
+                      </button>
+                    </div>
+                  </>
                 )}
               </div>
             )}
