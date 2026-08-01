@@ -109,8 +109,8 @@ export default function Sidebar() {
             key={d.id}
             className="group flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-50"
           >
-            <span className="truncate" title={d.filename}>
-              {d.filename}
+            <span className="truncate" title={d.title ? d.filename : undefined}>
+              {d.title ?? d.filename}
             </span>
             <span className="flex shrink-0 items-center gap-1.5">
               {confirmId === d.id && deletingId !== d.id ? (

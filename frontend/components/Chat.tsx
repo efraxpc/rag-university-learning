@@ -142,7 +142,7 @@ export default function Chat({ onToggleSidebar }: { onToggleSidebar: () => void 
   function summarizeSelection() {
     if (!summaryDocs || selectedIds.size === 0) return;
     const chosen = summaryDocs.filter((d) => selectedIds.has(d.id));
-    const names = chosen.map((d) => d.filename).join(", ");
+    const names = chosen.map((d) => d.title ?? d.filename).join(", ");
     setShowSummaryMenu(false);
     send(
       chosen.length === 1
@@ -294,7 +294,9 @@ export default function Chat({ onToggleSidebar }: { onToggleSidebar: () => void 
                               className="h-3.5 w-3.5 shrink-0 accent-violet-600"
                             />
                             <span>📄</span>
-                            <span className="truncate">{d.filename}</span>
+                            <span className="truncate" title={d.title ? d.filename : undefined}>
+                              {d.title ?? d.filename}
+                            </span>
                           </label>
                         </li>
                       ))}

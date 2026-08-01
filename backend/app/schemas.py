@@ -10,6 +10,7 @@ class DocumentOut(BaseModel):
     filename: str
     gcs_uri: str
     status: str  # pending | ready | error
+    title: str | None = None  # título auto-generado de la clase (NULL = pendiente)
     created_at: datetime
 
 

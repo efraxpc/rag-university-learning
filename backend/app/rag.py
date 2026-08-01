@@ -388,6 +388,61 @@ def build_summary_prompt(filename: str, content: str) -> str:
     )
 
 
+_TITLE_PROMPT = """Generate a SHORT title (max 10 words) for this class document,
+as it would appear in a course classroom list.
+
+Rules:
+- Reply in SPANISH with ONLY the title: no quotes, no trailing period, no
+  explanation.
+- Base it ONLY on the provided content (topic of the class), not on the
+  filename.
+
+Filename (only as a hint): {filename}
+
+Content (beginning of the document):
+{content}
+
+Title:"""
+
+# Caracteres del inicio del documento que bastan para inferir el título.
+_TITLE_CONTENT_CHARS = 6000
+
+
+def build_title_prompt(filename: str, content: str) -> str:
+    """Prompt del título auto-generado de la clase (documents.title)."""
+    return _TITLE_PROMPT.format(filename=filename, content=content)
+
+
+def generate_title(document_id: int) -> str:
+    """Genera y cachea el título de la clase (documents.title).
+
+    Usa el inicio del contenido (fetch_document_blocks, sin embeddings) y
+    FAST_MODEL: una sola llamada barata por documento, ever. Lanza
+    LookupError si el documento no tiene contenido.
+    """
+    blocks = fetch_document_blocks(document_id)
+    with get_engine().connect() as conn:
+        filename = conn.execute(
+            text("SELECT filename FROM documents WHERE id = :id"),
+            {"id": document_id},
+        ).scalar_one()
+    raw = llm.generate(
+        build_title_prompt(filename, blocks[0][:_TITLE_CONTENT_CHARS]),
+        model=settings.fast_model,
+    )
+    # Saneado: una sola línea, sin comillas ni punto final, largo acotado.
+    title = raw.strip().splitlines()[0].strip().strip('"\'').rstrip(".")[:120]
+    if not title:
+        raise ValueError(f"el LLM devolvió un título vacío para el documento {document_id}")
+    with get_engine().begin() as conn:
+        conn.execute(
+            text("UPDATE documents SET title = :t WHERE id = :id"),
+            {"t": title, "id": document_id},
+        )
+    logger.info("título generado para documento %d: %s", document_id, title)
+    return title
+
+
 def build_reduce_prompt(filename: str, partials: list[str]) -> str:
     """Prompt del reduce: combinar los resúmenes parciales en uno final."""
     joined = "\n\n---\n\n".join(

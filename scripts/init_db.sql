@@ -16,6 +16,10 @@ CREATE TABLE IF NOT EXISTS documents (
     -- Caché del resumen de clase entera (map-reduce, ver backend/app/rag.py).
     -- NULL = aún no calculado; se rellena en la primera petición de resumen.
     summary    TEXT,
+    -- Título de la clase auto-generado por el LLM (backend/app/rag.py).
+    -- NULL = pendiente; se genera de forma perezosa al listar documentos
+    -- ready (GET /documents) y se muestra en el frontend.
+    title      TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -50,6 +54,7 @@ CREATE INDEX IF NOT EXISTS chunks_parent_id_idx ON chunks (parent_id);
 CREATE INDEX IF NOT EXISTS parents_document_id_idx ON parents (document_id);
 CREATE INDEX IF NOT EXISTS documents_created_at_idx ON documents (created_at DESC);
 
--- Migración idempotente para DBs creadas antes de la columna summary
--- (CREATE TABLE IF NOT EXISTS no altera tablas ya existentes).
+-- Migración idempotente para DBs creadas antes de las columnas summary y
+-- title (CREATE TABLE IF NOT EXISTS no altera tablas ya existentes).
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS summary TEXT;
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS title TEXT;

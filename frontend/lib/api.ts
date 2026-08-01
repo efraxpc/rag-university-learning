@@ -6,6 +6,7 @@ export type Doc = {
   filename: string;
   gcs_uri: string;
   status: "pending" | "ready" | "error";
+  title: string | null; // título auto-generado de la clase (null = pendiente)
   created_at: string;
 };
 

@@ -5,12 +5,14 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, UploadFile
 from sqlalchemy import text
 
+from .. import rag
 from ..config import settings
 from ..db import get_engine
 from ..schemas import DocumentOut
@@ -140,16 +142,48 @@ def upload_document(file: UploadFile) -> dict:
 def list_documents() -> list[DocumentOut]:
     try:
         with get_engine().connect() as conn:
-            rows = conn.execute(
+            rows = list(conn.execute(
                 text(
-                    "SELECT id, filename, gcs_uri, status, created_at "
+                    "SELECT id, filename, gcs_uri, status, title, created_at "
                     "FROM documents ORDER BY created_at DESC LIMIT 100"
                 )
-            ).mappings()
-            return [DocumentOut(**row) for row in rows]
+            ).mappings())
     except Exception as exc:
         logger.exception("Error consultando la base de datos")
         raise HTTPException(502, f"Error consultando la base de datos: {exc}") from exc
+    _kickoff_title_generation(rows)
+    return [DocumentOut(**row) for row in rows]
+
+
+# Generación perezosa de títulos (documents.title): al listar, cada documento
+# ready sin título dispara un hilo en background que lo genera con FAST_MODEL
+# (ver rag.generate_title); en el siguiente refresco del frontend ya aparece.
+# Los errores solo se loguean: nunca rompen el listado y se reintenta después.
+_titles_in_flight: set[int] = set()
+_titles_lock = threading.Lock()
+
+
+def _generate_title_task(doc_id: int) -> None:
+    try:
+        rag.generate_title(doc_id)
+    except Exception:
+        logger.warning("No se pudo generar el título del documento %s", doc_id, exc_info=True)
+    finally:
+        with _titles_lock:
+            _titles_in_flight.discard(doc_id)
+
+
+def _kickoff_title_generation(rows: list) -> None:
+    for row in rows:
+        if row["status"] != "ready" or row["title"]:
+            continue
+        with _titles_lock:
+            if row["id"] in _titles_in_flight:
+                continue
+            _titles_in_flight.add(row["id"])
+        threading.Thread(
+            target=_generate_title_task, args=(row["id"],), daemon=True
+        ).start()
 
 
 def _delete_physical_file(uri: str, doc_id: int) -> None:
