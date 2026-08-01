@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { listDocuments, uploadDocument, type Doc } from "../lib/api";
+import { listDocuments, uploadDocument, deleteDocument, type Doc } from "../lib/api";
 
 const STATUS: Record<Doc["status"], { label: string; classes: string; pulse?: boolean }> = {
   ready: { label: "ready", classes: "bg-emerald-100 text-emerald-700" },
@@ -13,6 +13,7 @@ export default function Sidebar() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [docs, setDocs] = useState<Doc[]>([]);
   const [busy, setBusy] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
@@ -50,6 +51,25 @@ export default function Sidebar() {
     }
   }
 
+  async function onDelete(doc: Doc) {
+    if (
+      !window.confirm(
+        `¿Borrar "${doc.filename}"? También se eliminarán sus chunks de la base de datos.`
+      )
+    )
+      return;
+    setDeletingId(doc.id);
+    setError(null);
+    try {
+      await deleteDocument(doc.id);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error desconocido");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   return (
     <aside className="flex h-full w-72 flex-col border-r border-slate-200 bg-white">
       <div className="flex items-center gap-3 border-b border-slate-200 px-5 py-4">
@@ -63,11 +83,11 @@ export default function Sidebar() {
       <div className="p-4">
         <label className="flex cursor-pointer flex-col items-center gap-1.5 rounded-xl border-2 border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-500 transition hover:border-blue-400 hover:text-blue-600">
           <span className="text-2xl">⬆️</span>
-          <span>{busy ? "Subiendo…" : "Subir PDF, TXT, MD o IPYNB"}</span>
+          <span>{busy ? "Subiendo…" : "Subir PDF, TXT, MD, VTT o IPYNB"}</span>
           <input
             ref={fileRef}
             type="file"
-            accept=".pdf,.txt,.md,.ipynb"
+            accept=".pdf,.txt,.md,.vtt,.ipynb"
             className="hidden"
             onChange={onUpload}
             disabled={busy}
@@ -89,17 +109,34 @@ export default function Sidebar() {
         {docs.map((d) => (
           <li
             key={d.id}
-            className="flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-50"
+            className="group flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-50"
           >
             <span className="truncate" title={d.filename}>
               {d.filename}
             </span>
-            <span
-              className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS[d.status].classes} ${
-                STATUS[d.status].pulse ? "animate-pulse" : ""
-              }`}
-            >
-              {STATUS[d.status].label}
+            <span className="flex shrink-0 items-center gap-1.5">
+              <span
+                className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS[d.status].classes} ${
+                  STATUS[d.status].pulse ? "animate-pulse" : ""
+                }`}
+              >
+                {STATUS[d.status].label}
+              </span>
+              {deletingId === d.id ? (
+                <span
+                  className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-300 border-t-rose-500"
+                  title="Borrando…"
+                />
+              ) : (
+                <button
+                  onClick={() => onDelete(d)}
+                  disabled={deletingId !== null}
+                  title="Borrar documento"
+                  className="hidden text-slate-400 transition hover:text-rose-600 group-hover:inline disabled:opacity-40"
+                >
+                  🗑
+                </button>
+              )}
             </span>
           </li>
         ))}

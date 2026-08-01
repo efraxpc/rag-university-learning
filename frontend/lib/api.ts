@@ -36,6 +36,11 @@ export async function uploadDocument(file: File): Promise<void> {
   if (!res.ok) throw new Error(await res.text());
 }
 
+export async function deleteDocument(id: number): Promise<void> {
+  const res = await fetch(`${BASE}/documents/${id}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(await res.text());
+}
+
 export async function ask(question: string, documentId?: number): Promise<QueryResponse> {
   const res = await fetch(`${BASE}/query`, {
     method: "POST",

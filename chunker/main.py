@@ -2,7 +2,8 @@
 
 Se ejecuta como K8s Job efímero (pod Spot) por cada documento subido:
 - Lee el documento del bucket montado con GCS FUSE en /documents.
-- Extrae el texto (pypdf para PDF; JSON cells para IPYNB; lectura directa para TXT/MD).
+- Extrae el texto (pypdf para PDF; JSON cells para IPYNB; limpieza de cues y
+  timestamps para VTT; lectura directa para TXT/MD).
 - Troceo con ventana deslizante (tamaño + solape configurables).
 - SMALL_TO_BIG=true: trocea en parents (grandes, contexto) y en children
   (pequeños); vectoriza SOLO los children y los vincula a su parent.
@@ -91,6 +92,34 @@ def get_genai_client():
     return genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 
 
+def _extract_vtt(path: str) -> str:
+    """Extrae el texto hablado de un WebVTT: quita la cabecera, los bloques
+    NOTE/STYLE, los identificadores de cue, las líneas de timestamps y los
+    tags inline; deduplica líneas consecutivas (muy común en subtítulos)."""
+    import re
+
+    ts_line = re.compile(r"^\d{2}:\d{2}:\d{2}[.,]\d{3}\s+-->\s+")
+    inline_tag = re.compile(r"<[^>]+>")
+    lines = []
+    skip_block = False
+    with open(path, encoding="utf-8", errors="replace") as fh:
+        for raw in fh:
+            line = raw.strip()
+            if not line:
+                skip_block = False  # fin de bloque (cues y NOTE/STYLE)
+                continue
+            if line.startswith(("WEBVTT", "NOTE", "STYLE", "REGION")):
+                skip_block = line.startswith(("NOTE", "STYLE", "REGION"))
+                continue
+            if skip_block or ts_line.match(line) or line.isdigit():
+                continue
+            text_ = inline_tag.sub("", line).strip()
+            # Dedupe de líneas consecutivas repetidas (karaoke de subtítulos).
+            if text_ and (not lines or lines[-1] != text_):
+                lines.append(text_)
+    return "\n".join(lines)
+
+
 def extract_text(path: str) -> str:
     if path.lower().endswith(".pdf"):
         from pypdf import PdfReader
@@ -113,6 +142,8 @@ def extract_text(path: str) -> str:
             else:  # markdown / raw
                 parts.append(text_)
         return "\n\n".join(parts)
+    if path.lower().endswith(".vtt"):
+        return _extract_vtt(path)
     with open(path, encoding="utf-8", errors="replace") as fh:
         return fh.read()
 

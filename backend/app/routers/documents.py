@@ -19,7 +19,7 @@ logger = logging.getLogger("rag.documents")
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
-ALLOWED_EXTENSIONS = {".pdf", ".txt", ".md", ".ipynb"}
+ALLOWED_EXTENSIONS = {".pdf", ".txt", ".md", ".ipynb", ".vtt"}
 
 # backend/app/routers/documents.py → raíz del repo (donde vive chunker/)
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -150,3 +150,49 @@ def list_documents() -> list[DocumentOut]:
     except Exception as exc:
         logger.exception("Error consultando la base de datos")
         raise HTTPException(502, f"Error consultando la base de datos: {exc}") from exc
+
+
+def _delete_physical_file(uri: str, doc_id: int) -> None:
+    """Borrado físico best-effort: si falla, la DB ya es consistente y solo
+    queda un fichero/blob huérfano (se loguea warning, no rompe el 204)."""
+    try:
+        if uri.startswith("local://"):
+            Path(uri[len("local://"):]).unlink(missing_ok=True)
+        elif uri.startswith("gs://"):
+            from google.cloud import storage
+
+            bucket_name, _, object_name = uri[len("gs://"):].partition("/")
+            storage.Client(project=settings.project_id or None).bucket(
+                bucket_name
+            ).blob(object_name).delete()
+    except Exception:
+        logger.warning(
+            "No se pudo borrar el fichero físico %s (document_id=%s); queda huérfano",
+            uri, doc_id, exc_info=True,
+        )
+
+
+@router.delete("/{doc_id}", status_code=204)
+def delete_document(doc_id: int) -> None:
+    """Borra un documento, sus chunks y parents (ON DELETE CASCADE) y el
+    fichero físico (disco local o blob de GCS).
+
+    Se permite borrar en cualquier estado: si estaba 'pending', el chunker en
+    curso fallará por la FK y terminará con error en el log (Job efímero).
+    """
+    try:
+        with get_engine().begin() as conn:
+            uri = conn.execute(
+                text("SELECT gcs_uri FROM documents WHERE id=:i"), {"i": doc_id}
+            ).scalar()
+            if uri is None:
+                raise HTTPException(404, f"Documento {doc_id} no encontrado.")
+            conn.execute(text("DELETE FROM documents WHERE id=:i"), {"i": doc_id})
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Error borrando el documento %s", doc_id)
+        raise HTTPException(502, f"Error borrando el documento: {exc}") from exc
+
+    _delete_physical_file(uri, doc_id)
+    logger.info("Documento %s borrado (uri=%s)", doc_id, uri)
