@@ -1,132 +1,17 @@
-* {
-  box-sizing: border-box;
-}
+@import "tailwindcss";
 
-body {
-  margin: 0;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  background: #f6f7f9;
-  color: #1a1a1a;
+/* Indicador "escribiendo…" (3 puntos) */
+@keyframes typing-bounce {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+  40% { transform: translateY(-4px); opacity: 1; }
 }
+.typing-dot {
+  animation: typing-bounce 1.2s infinite ease-in-out;
+}
+.typing-dot:nth-child(2) { animation-delay: 0.15s; }
+.typing-dot:nth-child(3) { animation-delay: 0.3s; }
 
-.container {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 2rem 1rem;
-}
-
-h1 {
-  margin-bottom: 0.25rem;
-}
-
-.subtitle {
-  color: #555;
-  margin-top: 0;
-}
-
-.grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 1.5rem;
-}
-
-@media (min-width: 800px) {
-  .grid {
-    grid-template-columns: 320px 1fr;
-  }
-}
-
-.card {
-  background: #fff;
-  border: 1px solid #e2e4e8;
-  border-radius: 10px;
-  padding: 1.25rem;
-}
-
-.card h2 {
-  margin-top: 0;
-  font-size: 1.1rem;
-}
-
-button {
-  background: #1a73e8;
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  padding: 0.5rem 1rem;
-  font-size: 0.95rem;
-  cursor: pointer;
-}
-
-button:disabled {
-  background: #9bbbea;
-  cursor: default;
-}
-
-input[type="text"] {
-  width: 100%;
-  padding: 0.5rem;
-  border: 1px solid #cfd3d8;
-  border-radius: 6px;
-  font-size: 0.95rem;
-}
-
-.row {
-  display: flex;
-  gap: 0.5rem;
-  margin-top: 0.75rem;
-}
-
-.answer {
-  white-space: pre-wrap;
-  background: #f1f6fe;
-  border-radius: 8px;
-  padding: 1rem;
-  margin-top: 1rem;
-}
-
-.sources {
-  margin-top: 1rem;
-  font-size: 0.85rem;
-  color: #444;
-}
-
-.sources details {
-  margin-top: 0.25rem;
-}
-
-.docs-list {
-  list-style: none;
-  padding: 0;
-  margin: 1rem 0 0;
-  font-size: 0.9rem;
-}
-
-.docs-list li {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.5rem;
-  padding: 0.4rem 0;
-  border-bottom: 1px solid #eee;
-  word-break: break-all;
-}
-
-.status-ready {
-  color: #137333;
-  font-weight: 600;
-}
-
-.status-pending {
-  color: #b06000;
-  font-weight: 600;
-}
-
-.status-error {
-  color: #c5221f;
-  font-weight: 600;
-}
-
-.muted {
-  color: #777;
-  font-size: 0.85rem;
-}
+/* Scrollbar sutil del área de mensajes y del sidebar */
+.chat-scroll::-webkit-scrollbar { width: 6px; }
+.chat-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+.chat-scroll::-webkit-scrollbar-track { background: transparent; }

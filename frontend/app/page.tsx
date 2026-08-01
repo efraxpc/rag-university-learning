@@ -1,17 +1,31 @@
+"use client";
+
+import { useState } from "react";
 import Chat from "../components/Chat";
-import Upload from "../components/Upload";
+import Sidebar from "../components/Sidebar";
 
 export default function Home() {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
   return (
-    <main className="container">
-      <h1>RAG University</h1>
-      <p className="subtitle">
-        Pregunta a tus documentos (PDF/TXT/MD/IPYNB) con búsqueda semántica + Gemini.
-      </p>
-      <div className="grid">
-        <Upload />
-        <Chat />
+    <div className="flex h-screen bg-slate-50 text-slate-900">
+      {/* overlay móvil */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-20 bg-black/30 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+      <div
+        className={`fixed z-30 h-full transform transition-transform duration-200 md:static md:translate-x-0 ${
+          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        <Sidebar />
       </div>
-    </main>
+      <main className="flex min-w-0 flex-1 flex-col">
+        <Chat onToggleSidebar={() => setSidebarOpen((v) => !v)} />
+      </main>
+    </div>
   );
 }
