@@ -37,6 +37,9 @@ SYSTEM_INSTRUCTIONS = (
     "responde de forma directa y breve SIN esa estructura.\n"
     # ── Técnica: RESTRICCIONES ──
     "Restricciones obligatorias:\n"
+    "- Usa palabras simples y frases cortas, como si se lo explicaras a "
+    "alguien que no sabe nada del tema; si un tecnicismo es imprescindible, "
+    "defínelo con una analogía cotidiana.\n"
     "- Responde siempre en español.\n"
     "- Formatea en Markdown: encabezados, listas y negritas para los conceptos; "
     "el código SIEMPRE en bloques fenced indicando el lenguaje (```python, "
@@ -61,6 +64,9 @@ GENERAL_INSTRUCTIONS = (
     "*Esta respuesta no proviene de los documentos de la clase; es conocimiento "
     "general de Gemini.*\n"
     "Restricciones obligatorias:\n"
+    "- Usa palabras simples y frases cortas, como si se lo explicaras a "
+    "alguien que no sabe nada del tema; si un tecnicismo es imprescindible, "
+    "defínelo con una analogía cotidiana.\n"
     "- Responde siempre en español.\n"
     "- Formatea en Markdown: encabezados, listas y negritas para los conceptos; "
     "el código SIEMPRE en bloques fenced indicando el lenguaje (```python, "
@@ -77,6 +83,9 @@ general que NO esté cubierto: profundización, buenas prácticas, ejemplos
 adicionales o contexto actualizado. No repitas lo que ya dice la respuesta.
 
 Restricciones obligatorias:
+- Explica lo adicional también con palabras simples y frases cortas, sin dar
+  por sabido lo técnico; si un tecnicismo es imprescindible, defínelo con una
+  analogía cotidiana.
 - Responde siempre en español y en Markdown.
 - El código SIEMPRE en bloques fenced indicando el lenguaje, con comentarios
   en las líneas clave y sin omitir imports.
