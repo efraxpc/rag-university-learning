@@ -2,7 +2,7 @@ flowchart LR
     U([Usuario]) -->|"kubectl port-forward<br/>(sin Load Balancer)"| FE
 
     subgraph GKE["GKE Autopilot (regional, sin GPU)"]
-        FE["Next.js UI<br/>chat + subida de docs"]
+        FE["Next.js UI<br/>chat + subida de docs<br/>resumen multi-clase (checkboxes)"]
         API["FastAPI orquestador<br/>/documents · /query<br/>retrieval · prompt augmentation · sanity checks"]
         JOB["K8s Job de chunking (Spot)<br/>extraer → limpiar → trocear"]
         FUSE[/"GCS FUSE CSI<br/>mount del bucket"/]
@@ -11,10 +11,12 @@ flowchart LR
     subgraph GCP["Servicios gestionados GCP"]
         GCS[("Cloud Storage<br/>documentos crudos")]
         DB[("Cloud SQL PostgreSQL + pgvector<br/>IP privada · índice HNSW")]
-        SM["Secret Manager<br/>API key Gemini · password DB"]
-        GEM["Gemini API<br/>AI Studio free tier → Vertex AI"]
+        SM["Secret Manager<br/>API keys (Gemini · Anthropic)<br/>password DB"]
+        GEM["Gemini API<br/>SOLO embeddings<br/>AI Studio free tier → Vertex AI"]
         OBS["Cloud Logging + Monitoring<br/>+ Query Insights"]
     end
+
+    LLM["Anthropic Claude (generación)<br/>patrón Strategy por LLM_PROVIDER:<br/>API directa (default) ·<br/>Vertex AI Model Garden<br/>Fable 5 (respuestas) · Haiku 4.5 (auxiliar)"]
 
     %% Flujo A: ingesta (bajo demanda)
     FE -->|"POST /documents"| API
@@ -31,8 +33,8 @@ flowchart LR
     API -->|"7. embed de la pregunta"| GEM
     API -->|"8. búsqueda híbrida top-k<br/>HNSW + filtros metadata"| DB
     DB -->|"chunks + fuentes"| API
-    API -->|"9. prompt aumentado"| GEM
-    GEM -->|"10. respuesta generada"| API
+    API -->|"9. prompt aumentado"| LLM
+    LLM -->|"10. respuesta generada"| API
     API -->|"11. respuesta verificada + citas"| FE
 
     %% Transversal

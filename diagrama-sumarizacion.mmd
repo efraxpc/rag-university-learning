@@ -1,11 +1,23 @@
-%% Sumarización de la clase entera por metadatos (map-reduce + caché).
+%% Sumarización de clase entera por metadatos (map-reduce + caché), con
+%% selección múltiple de clases (checkboxes del chat, incluida "todas").
 %% Rama del flujo B (POST /query) implementada en backend/app/rag.py y
 %% backend/app/routers/query.py. Renderizable con Mermaid (flowchart TD).
 flowchart TD
-    A["Usuario: botón ✨ Resumir clase<br/>o pregunta con keywords<br/>('resume', 'de qué trata'…)"] --> B["POST /query<br/>question + document_id + summarize"]
+    A["Usuario: botón ✨ Resumir clase<br/>(checkboxes: 1..N clases o 'todas las clases')<br/>o pregunta con keywords ('resume', 'de qué trata'…)"] --> B["POST /query<br/>question + document_ids / document_id + summarize"]
     B --> C{"routers/query.py<br/>¿summarize=true o<br/>is_summary_request()?"}
-    C -- "No" --> Z["Flujo RAG normal<br/>(rewrite + expansión → HNSW top-k → Gemini)"]
-    C -- "Sí" --> D["resolve_summary_document()<br/>1) document_id explícito<br/>2) filename mencionado en la pregunta<br/>3) documento ready más reciente"]
+    C -- "No" --> Z["Flujo RAG normal<br/>(rewrite + expansión → HNSW top-k → Claude)"]
+    C -- "Sí" --> D0{"¿document_ids<br/>(selección del chat)?"}
+
+    %% Rama multi-documento (selección del usuario)
+    D0 -- "Sí (1..N)" --> MS["summarize_documents(ids)<br/>valida que todos estén ready<br/>(si no: HTTP 404)"]
+    MS --> MS1{"¿Cuántos<br/>documentos?"}
+    MS1 -- "1" --> F
+    MS1 -- "N" --> MP["Resumen POR DOCUMENTO en paralelo<br/>(ThreadPoolExecutor, caché o map-reduce<br/>de cada uno, ver rama inferior)"]
+    MP --> MR["REDUCE FINAL multi-documento (GEN_MODEL)<br/>build_multi_reduce_prompt(): fusiona los<br/>resúmenes citando cada fuente [Documento: X]<br/>NO se cachea (1 llamada sobre cachés)"]
+    MR --> P
+
+    %% Rama single-documento (por metadatos)
+    D0 -- "No" --> D["resolve_summary_document()<br/>1) document_id explícito<br/>2) filename mencionado en la pregunta<br/>3) documento ready más reciente"]
     D --> E{"¿Documento<br/>resuelto?"}
     E -- "No (keyword)" --> Z
     E -- "No (botón)" --> E400["HTTP 400<br/>'Indica qué documento resumir'"]
@@ -15,9 +27,9 @@ flowchart TD
     G -- "No" --> I["fetch_document_blocks()<br/>SQL solo por metadatos (SIN embeddings):<br/>COALESCE(parent, chunk) ordenado por<br/>parent_index / chunk_index"]
     I --> J["Agrupar bloques enteros hasta<br/>SUMMARY_BLOCK_CHARS (24 000 chars)"]
     J --> K{"¿Cuántos<br/>grupos?"}
-    K -- "1 grupo" --> L["1 llamada a Gemini<br/>build_summary_prompt()"]
-    K -- "N grupos" --> M["MAP paralelo: ThreadPoolExecutor<br/>SUMMARY_MAX_WORKERS = 4<br/>resumen parcial por grupo (Gemini)"]
-    M --> N["REDUCE: build_reduce_prompt()<br/>fusiona parciales en resumen final (Gemini)"]
+    K -- "1 grupo" --> L["1 llamada a Claude (GEN_MODEL)<br/>build_summary_prompt()"]
+    K -- "N grupos" --> M["MAP paralelo: ThreadPoolExecutor<br/>SUMMARY_MAX_WORKERS = 4<br/>resumen parcial por grupo (FAST_MODEL, Haiku 4.5)"]
+    M --> N["REDUCE: build_reduce_prompt()<br/>fusiona parciales en resumen final (GEN_MODEL, Fable 5)"]
     L --> O["UPDATE documents<br/>SET summary = resultado<br/>(caché: se calcula una sola vez)"]
     N --> O
     O --> P["sanity_check() → QueryOut<br/>(answer Markdown, sources=[])"]
@@ -27,5 +39,7 @@ flowchart TD
 
     style M fill:#fde68a,stroke:#d97706,stroke-width:3px
     style N fill:#fde68a,stroke:#d97706,stroke-width:3px
+    style MP fill:#fde68a,stroke:#d97706,stroke-width:3px
+    style MR fill:#fde68a,stroke:#d97706,stroke-width:3px
     style G fill:#ddd6fe,stroke:#7c3aed,stroke-width:2px
     style O fill:#ddd6fe,stroke:#7c3aed,stroke-width:2px
