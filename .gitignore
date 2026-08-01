@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+
+# Secretos / entorno
+.env
+.env.local
+*.key
+*.pem
+
+# Rendered manifests
+k8s/rendered/
+
+# Estado del test local (PIDs y logs)
+.local-test/
+
+# Documentos subidos en modo local (datos de prueba)
+local-docs/
+
+# Tooling de agentes (skill utilizada para generar el proyecto)
+.agents/
+skills-lock.json
+
+# SO
+.DS_Store

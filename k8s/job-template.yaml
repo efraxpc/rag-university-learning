@@ -1,0 +1,73 @@
+# PLANTILLA DE REFERENCIA del Job de chunking.
+# La API no aplica este fichero: construye el Job dinámicamente vía la API de
+# Kubernetes (backend/app/k8s_jobs.py). Se incluye como documentación del spec
+# y para depuración manual (kubectl apply -f tras sustituir valores).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chunker-REFERENCE
+  namespace: rag
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      serviceAccountName: ksa-chunker
+      restartPolicy: Never
+      nodeSelector:
+        cloud.google.com/gke-spot: "true" # Spot: −60–91 % de coste
+      containers:
+        - name: chunker
+          image: ${REPO_URL}/chunker:1.0
+          env:
+            - name: DOCUMENT_ID
+              value: "0"
+            - name: BUCKET_NAME
+              value: "${BUCKET_NAME}"
+            - name: FILE_NAME
+              value: "uploads/ejemplo.pdf"
+            - name: INSTANCE_CONNECTION_NAME
+              value: "${INSTANCE_CONNECTION_NAME}"
+            - name: DB_NAME
+              value: "ragdb"
+            - name: DB_USER
+              value: "app"
+            - name: EMBEDDING_MODEL
+              value: "${EMBEDDING_MODEL}"
+            - name: EMBEDDING_DIMS
+              value: "${EMBEDDING_DIMS}"
+            - name: SMALL_TO_BIG
+              value: "${SMALL_TO_BIG}"
+            - name: PARENT_CHUNK_SIZE
+              value: "${PARENT_CHUNK_SIZE}"
+            - name: PARENT_CHUNK_OVERLAP
+              value: "${PARENT_CHUNK_OVERLAP}"
+            - name: SMALL_CHUNK_SIZE
+              value: "${SMALL_CHUNK_SIZE}"
+            - name: SMALL_CHUNK_OVERLAP
+              value: "${SMALL_CHUNK_OVERLAP}"
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: rag-secrets
+                  key: GEMINI_API_KEY
+            - name: DB_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: rag-secrets
+                  key: DB_PASS
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: docs
+              mountPath: /documents
+              readOnly: true
+      volumes:
+        - name: docs
+          csi:
+            driver: gcsfuse.csi.storage.gke.io
+            readOnly: true
+            volumeAttributes:
+              bucketName: ${BUCKET_NAME}

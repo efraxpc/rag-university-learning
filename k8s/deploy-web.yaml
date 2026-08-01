@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: rag
+  labels:
+    app: web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+        - name: web
+          image: ${REPO_URL}/web:1.0
+          ports:
+            - containerPort: 3000
+          env:
+            # Proxy server-side de Next.js → API interna (sin Load Balancer).
+            - name: API_INTERNAL_URL
+              value: "http://api.rag.svc.cluster.local:8000"
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi

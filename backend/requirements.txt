@@ -1,0 +1,10 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+SQLAlchemy>=2.0
+pg8000>=1.31
+cloud-sql-python-connector[pg8000]>=1.13
+google-genai>=1.0
+google-cloud-storage>=2.18
+kubernetes>=30.0
+pydantic-settings>=2.4
+python-multipart>=0.0.9

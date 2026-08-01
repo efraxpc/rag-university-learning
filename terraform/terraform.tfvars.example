@@ -1,0 +1,6 @@
+# Copia este fichero a terraform.tfvars y rellena los valores.
+# terraform.tfvars está en .gitignore (contiene la API key).
+project_id     = "tu-proyecto-gcp"
+region         = "us-central1"
+bucket_name    = "rag-docs-tu-proyecto-gcp" # globalmente único
+gemini_api_key = "tu-api-key-de-ai-studio"  # https://aistudio.google.com/apikey

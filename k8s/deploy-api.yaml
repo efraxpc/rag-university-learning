@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: rag
+  labels:
+    app: api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      serviceAccountName: ksa-api
+      containers:
+        - name: api
+          image: ${REPO_URL}/api:1.0
+          ports:
+            - containerPort: 8000
+          env:
+            - name: PROJECT_ID
+              value: "${PROJECT_ID}"
+            - name: REGION
+              value: "${REGION}"
+            - name: BUCKET_NAME
+              value: "${BUCKET_NAME}"
+            - name: INSTANCE_CONNECTION_NAME
+              value: "${INSTANCE_CONNECTION_NAME}"
+            - name: DB_NAME
+              value: "ragdb"
+            - name: DB_USER
+              value: "app"
+            - name: EMBEDDING_MODEL
+              value: "${EMBEDDING_MODEL}"
+            - name: EMBEDDING_DIMS
+              value: "${EMBEDDING_DIMS}"
+            - name: GEN_MODEL
+              value: "${GEN_MODEL}"
+            - name: SMALL_TO_BIG
+              value: "${SMALL_TO_BIG}"
+            - name: PARENT_CHUNK_SIZE
+              value: "${PARENT_CHUNK_SIZE}"
+            - name: PARENT_CHUNK_OVERLAP
+              value: "${PARENT_CHUNK_OVERLAP}"
+            - name: SMALL_CHUNK_SIZE
+              value: "${SMALL_CHUNK_SIZE}"
+            - name: SMALL_CHUNK_OVERLAP
+              value: "${SMALL_CHUNK_OVERLAP}"
+            - name: QUERY_REWRITE
+              value: "${QUERY_REWRITE}"
+            - name: QUERY_EXPANSION
+              value: "${QUERY_EXPANSION}"
+            - name: EXPANSION_VARIANTS
+              value: "${EXPANSION_VARIANTS}"
+            - name: CHUNKER_IMAGE
+              value: "${REPO_URL}/chunker:1.0"
+            - name: JOB_NAMESPACE
+              value: "rag"
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: rag-secrets
+                  key: GEMINI_API_KEY
+            - name: DB_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: rag-secrets
+                  key: DB_PASS
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 20

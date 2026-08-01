@@ -1,0 +1,11 @@
+# Referencia para kustomize. OJO: los placeholders ${...} se sustituyen con
+# envsubst desde scripts/deploy.sh (kubectl apply -k no los resuelve).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - serviceaccounts.yaml
+  - rbac.yaml
+  - deploy-api.yaml
+  - deploy-web.yaml
+  - services.yaml
