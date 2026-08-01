@@ -9,9 +9,10 @@ const nextConfig: NextConfig = {
   experimental: {
     // En dev, Next limita las peticiones proxificadas (rewrites) a 30 s por
     // defecto y aborta el socket → "Failed to proxy ... ECONNRESET". Las
-    // consultas RAG tardan ~30-60 s (query opt + embeddings + generación),
+    // consultas RAG tardan ~30-60 s y el PRIMER resumen map-reduce de un
+    // corpus largo puede superar los 2 min (luego se sirve desde caché),
     // así que hay que dar margen. OJO: 0 NO lo desactiva (cae al default).
-    proxyTimeout: 120_000,
+    proxyTimeout: 300_000,
   },
   async rewrites() {
     return [{ source: "/api/:path*", destination: `${API_INTERNAL_URL}/:path*` }];

@@ -1,0 +1,31 @@
+%% Sumarización de la clase entera por metadatos (map-reduce + caché).
+%% Rama del flujo B (POST /query) implementada en backend/app/rag.py y
+%% backend/app/routers/query.py. Renderizable con Mermaid (flowchart TD).
+flowchart TD
+    A["Usuario: botón ✨ Resumir clase<br/>o pregunta con keywords<br/>('resume', 'de qué trata'…)"] --> B["POST /query<br/>question + document_id + summarize"]
+    B --> C{"routers/query.py<br/>¿summarize=true o<br/>is_summary_request()?"}
+    C -- "No" --> Z["Flujo RAG normal<br/>(rewrite + expansión → HNSW top-k → Gemini)"]
+    C -- "Sí" --> D["resolve_summary_document()<br/>1) document_id explícito<br/>2) filename mencionado en la pregunta<br/>3) documento ready más reciente"]
+    D --> E{"¿Documento<br/>resuelto?"}
+    E -- "No (keyword)" --> Z
+    E -- "No (botón)" --> E400["HTTP 400<br/>'Indica qué documento resumir'"]
+    E -- "Sí" --> F["summarize_document(doc_id)"]
+    F --> G{"¿documents.summary<br/>cacheado?"}
+    G -- "Sí" --> H["Respuesta inmediata<br/>(~ms, sin llamadas al LLM)"]
+    G -- "No" --> I["fetch_document_blocks()<br/>SQL solo por metadatos (SIN embeddings):<br/>COALESCE(parent, chunk) ordenado por<br/>parent_index / chunk_index"]
+    I --> J["Agrupar bloques enteros hasta<br/>SUMMARY_BLOCK_CHARS (24 000 chars)"]
+    J --> K{"¿Cuántos<br/>grupos?"}
+    K -- "1 grupo" --> L["1 llamada a Gemini<br/>build_summary_prompt()"]
+    K -- "N grupos" --> M["MAP paralelo: ThreadPoolExecutor<br/>SUMMARY_MAX_WORKERS = 4<br/>resumen parcial por grupo (Gemini)"]
+    M --> N["REDUCE: build_reduce_prompt()<br/>fusiona parciales en resumen final (Gemini)"]
+    L --> O["UPDATE documents<br/>SET summary = resultado<br/>(caché: se calcula una sola vez)"]
+    N --> O
+    O --> P["sanity_check() → QueryOut<br/>(answer Markdown, sources=[])"]
+    H --> P
+    P --> Q["Chat.tsx: burbuja con Markdown<br/>(MISMO render que una respuesta RAG)"]
+    Z --> Q
+
+    style M fill:#fde68a,stroke:#d97706,stroke-width:3px
+    style N fill:#fde68a,stroke:#d97706,stroke-width:3px
+    style G fill:#ddd6fe,stroke:#7c3aed,stroke-width:2px
+    style O fill:#ddd6fe,stroke:#7c3aed,stroke-width:2px

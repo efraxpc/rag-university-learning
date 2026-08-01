@@ -41,11 +41,19 @@ export async function deleteDocument(id: number): Promise<void> {
   if (!res.ok) throw new Error(await res.text());
 }
 
-export async function ask(question: string, documentId?: number): Promise<QueryResponse> {
+export async function ask(
+  question: string,
+  documentId?: number,
+  summarize = false,
+): Promise<QueryResponse> {
   const res = await fetch(`${BASE}/query`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question, document_id: documentId ?? null }),
+    body: JSON.stringify({
+      question,
+      document_id: documentId ?? null,
+      summarize,
+    }),
   });
   if (!res.ok) throw new Error(await res.text());
   return res.json();

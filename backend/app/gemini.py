@@ -7,6 +7,7 @@
 
 import json
 import logging
+import threading
 
 from google import genai
 from google.genai import types
@@ -15,20 +16,28 @@ from .config import settings
 
 logger = logging.getLogger("rag.gemini")
 
-_client = None
+# Cliente POR HILO: el httpx interno del SDK no es seguro compartiéndolo
+# entre los workers del map paralelo de resúmenes, y cuando el GC cierra
+# una instancia puede cerrar el httpx que otro hilo está usando
+# (RuntimeError: "Cannot send a request, as the client has been closed.",
+# ver https://github.com/googleapis/python-genai/issues/1763).
+_tls = threading.local()
+
+
+def _new_client() -> genai.Client:
+    if settings.google_genai_use_vertexai.lower() == "true":
+        return genai.Client(
+            vertexai=True, project=settings.project_id, location=settings.region
+        )
+    return genai.Client(api_key=settings.gemini_api_key)
 
 
 def get_client() -> genai.Client:
-    global _client
-    if _client is not None:
-        return _client
-    if settings.google_genai_use_vertexai.lower() == "true":
-        _client = genai.Client(
-            vertexai=True, project=settings.project_id, location=settings.region
-        )
-    else:
-        _client = genai.Client(api_key=settings.gemini_api_key)
-    return _client
+    client = getattr(_tls, "client", None)
+    if client is None:
+        client = _new_client()
+        _tls.client = client
+    return client
 
 
 def embed_texts(texts: list[str], task_type: str = "RETRIEVAL_DOCUMENT") -> list[list[float]]:
@@ -49,9 +58,7 @@ def embed_query(text: str) -> list[float]:
     return embed_texts([text], task_type="RETRIEVAL_QUERY")[0]
 
 
-def generate(prompt: str, model: str | None = None) -> str:
-    """Genera texto. `model` permite usar otro modelo distinto de GEN_MODEL
-    (p. ej. el de conocimiento general, GENERAL_MODEL)."""
+def _generate_once(prompt: str, model: str | None) -> str:
     res = get_client().models.generate_content(
         model=model or settings.gen_model,
         contents=prompt,
@@ -60,6 +67,23 @@ def generate(prompt: str, model: str | None = None) -> str:
         ),
     )
     return res.text or ""
+
+
+def generate(prompt: str, model: str | None = None) -> str:
+    """Genera texto. `model` permite usar otro modelo distinto de GEN_MODEL
+    (p. ej. el de conocimiento general, GENERAL_MODEL).
+
+    Si el SDK ha cerrado el httpx interno (bug conocido bajo concurrencia),
+    se recrea el cliente del hilo y se reintenta UNA vez.
+    """
+    try:
+        return _generate_once(prompt, model)
+    except RuntimeError as exc:
+        if "client has been closed" not in str(exc):
+            raise
+        logger.warning("cliente httpx del SDK cerrado; recreando y reintentando")
+        _tls.client = None
+        return _generate_once(prompt, model)
 
 
 def vector_to_literal(vec: list[float]) -> str:

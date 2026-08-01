@@ -1,6 +1,9 @@
 """Endpoint de consulta RAG (flujo B, tiempo real).
 
 Estrategia de respuesta:
+- Si es petición de resumen de la clase entera (flag `summarize` del botón o
+  keywords en la pregunta): map-reduce por metadatos sobre el documento
+  resuelto, con caché en documents.summary (sin búsqueda vectorial).
 - Si los documentos responden a la pregunta (distancia <= MAX_DISTANCE):
   respuesta basada en el contenido de la clase + complemento de conocimiento
   general con GENERAL_MODEL.
@@ -37,6 +40,28 @@ def query(body: QueryIn) -> QueryOut:
     question = body.question.strip()
     if not question:
         raise HTTPException(400, "La pregunta no puede estar vacía.")
+
+    # Rama de resumen de clase entera (por metadatos, sin búsqueda vectorial):
+    # botón del chat (flag) o keywords en la pregunta.
+    if body.summarize or rag.is_summary_request(question):
+        resolved = rag.resolve_summary_document(question, body.document_id)
+        if resolved is not None:
+            doc_id, _filename = resolved
+            try:
+                answer = rag.summarize_document(doc_id)
+            except LookupError as exc:
+                raise HTTPException(
+                    404, "El documento no existe o aún no está listo."
+                ) from exc
+            except Exception as exc:
+                logger.exception("Error generando el resumen")
+                raise HTTPException(
+                    502, f"Error generando el resumen: {exc}"
+                ) from exc
+            return QueryOut(answer=rag.sanity_check(answer, []), sources=[])
+        if body.summarize:  # botón pulsado sin documento resoluble
+            raise HTTPException(400, "Indica qué documento quieres resumir.")
+        # Keyword sin documento resoluble → cae al flujo RAG normal.
 
     try:
         sources = rag.hybrid_search(question, body.document_id)

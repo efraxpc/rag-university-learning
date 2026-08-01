@@ -58,6 +58,12 @@ class Settings(BaseSettings):
     # 4096: las explicaciones estructuradas con código necesitan más tokens.
     max_output_tokens: int = 4096
 
+    # Resumen de clase entera (map-reduce por metadatos, ver rag.py).
+    # Tamaño de bloque del map en caracteres (~6-8k tokens: seguro y rápido
+    # por llamada en gemini-2.5-flash) y paralelismo del map.
+    summary_block_chars: int = 24000
+    summary_max_workers: int = 4
+
     # Small-to-big (optimización pre-retrieval) + ventana deslizante.
     # Se propagan al Job de chunking / subproceso local.
     small_to_big: bool = True

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ask, type Source } from "../lib/api";
+import { ask, listDocuments, type Doc, type Source } from "../lib/api";
 import Markdown from "./Markdown";
 
 type Message = {
@@ -46,20 +46,42 @@ export default function Chat({ onToggleSidebar }: { onToggleSidebar: () => void 
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showSummaryMenu, setShowSummaryMenu] = useState(false);
+  const [summaryDocs, setSummaryDocs] = useState<Doc[] | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const summaryRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
-  async function send(text?: string) {
-    const question = (text ?? input).trim();
-    if (!question || loading) return;
+  // Cerrar el selector de resumen al hacer click fuera.
+  useEffect(() => {
+    if (!showSummaryMenu) return;
+    function onClickOutside(e: MouseEvent) {
+      if (summaryRef.current && !summaryRef.current.contains(e.target as Node)) {
+        setShowSummaryMenu(false);
+      }
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, [showSummaryMenu]);
+
+  async function send(
+    text?: string,
+    opts?: { question?: string; documentId?: number; summarize?: boolean },
+  ) {
+    const display = (text ?? input).trim();
+    if (!display || loading) return;
     setInput("");
-    setMessages((m) => [...m, { role: "user", content: question }]);
+    setMessages((m) => [...m, { role: "user", content: display }]);
     setLoading(true);
     try {
-      const res = await ask(question);
+      const res = await ask(
+        opts?.question ?? display,
+        opts?.documentId,
+        opts?.summarize ?? false,
+      );
       setMessages((m) => [
         ...m,
         { role: "assistant", content: res.answer, sources: res.sources },
@@ -75,6 +97,32 @@ export default function Chat({ onToggleSidebar }: { onToggleSidebar: () => void 
     } finally {
       setLoading(false);
     }
+  }
+
+  // Abre/cierra el selector de documentos listos para resumir.
+  async function toggleSummaryMenu() {
+    if (showSummaryMenu) {
+      setShowSummaryMenu(false);
+      return;
+    }
+    setShowSummaryMenu(true);
+    setSummaryDocs(null);
+    try {
+      const docs = await listDocuments();
+      setSummaryDocs(docs.filter((d) => d.status === "ready"));
+    } catch {
+      setSummaryDocs([]);
+    }
+  }
+
+  // Lanza el resumen de la clase entera por metadatos (flag summarize).
+  function summarizeDoc(doc: Doc) {
+    setShowSummaryMenu(false);
+    send(`📝 Resumen de la clase: ${doc.filename}`, {
+      question: "Resume la clase entera",
+      documentId: doc.id,
+      summarize: true,
+    });
   }
 
   return (
@@ -173,7 +221,45 @@ export default function Chat({ onToggleSidebar }: { onToggleSidebar: () => void 
       </div>
 
       <div className="border-t border-slate-200 bg-white px-4 py-3">
-        <div className="mx-auto flex max-w-3xl items-end gap-2">
+        <div className="mx-auto max-w-3xl">
+          <div className="relative mb-2" ref={summaryRef}>
+            <button
+              onClick={toggleSummaryMenu}
+              disabled={loading}
+              className="rounded-full bg-gradient-to-r from-amber-400 to-violet-500 px-4 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:shadow-md hover:brightness-105 disabled:opacity-50"
+            >
+              ✨ Resumir clase
+            </button>
+            {showSummaryMenu && (
+              <div className="absolute bottom-full left-0 z-10 mb-2 w-72 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+                <p className="border-b border-slate-100 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                  Elige la clase a resumir
+                </p>
+                {summaryDocs === null ? (
+                  <p className="px-3 py-3 text-sm text-slate-400">Cargando…</p>
+                ) : summaryDocs.length === 0 ? (
+                  <p className="px-3 py-3 text-sm text-slate-400">
+                    No hay documentos listos.
+                  </p>
+                ) : (
+                  <ul className="max-h-56 overflow-y-auto">
+                    {summaryDocs.map((d) => (
+                      <li key={d.id}>
+                        <button
+                          onClick={() => summarizeDoc(d)}
+                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-600 transition hover:bg-violet-50 hover:text-violet-700"
+                        >
+                          <span>📄</span>
+                          <span className="truncate">{d.filename}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </div>
+          <div className="flex items-end gap-2">
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -194,6 +280,7 @@ export default function Chat({ onToggleSidebar }: { onToggleSidebar: () => void 
           >
             ➤
           </button>
+          </div>
         </div>
       </div>
     </>

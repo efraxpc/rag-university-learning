@@ -8,6 +8,10 @@ SELECT extname, extversion FROM pg_extension WHERE extname = 'vector';
 SELECT column_name, data_type FROM information_schema.columns
 WHERE table_name = 'chunks' ORDER BY ordinal_position;
 
+-- 3b'. Esquema de documents: debe incluir la columna summary (caché de resúmenes)
+SELECT column_name, data_type FROM information_schema.columns
+WHERE table_name = 'documents' ORDER BY ordinal_position;
+
 SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'chunks';
 
 -- 3c. Contenido tras la ingesta (modelo small-to-big)

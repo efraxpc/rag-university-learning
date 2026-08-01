@@ -1,8 +1,11 @@
 """Lógica RAG del flujo de consulta: optimizaciones pre-retrieval
 (query rewriting + query expansion multi-query), búsqueda híbrida con
-fusión por parent, prompt augmentation y sanity checks procedurales."""
+fusión por parent, prompt augmentation y sanity checks procedurales.
+Incluye el resumen de clase entera por metadatos (map-reduce + caché)."""
 
 import logging
+import re
+from concurrent.futures import ThreadPoolExecutor
 
 from sqlalchemy import text
 
@@ -223,6 +226,214 @@ def build_general_prompt(question: str) -> str:
 def build_complement_prompt(question: str, rag_answer: str) -> str:
     """Prompt para complementar la respuesta RAG con conocimiento general."""
     return _COMPLEMENT_PROMPT.format(question=question, rag_answer=rag_answer)
+
+
+# ── Resumen de clase entera (por metadatos, no por vectores) ──
+# La búsqueda top-k nunca cubre un documento completo: para resumirlo se
+# traen TODOS sus bloques ordenados por metadatos (parent_index/chunk_index)
+# y se aplica map-reduce (resumir cada grupo en paralelo y combinar). El
+# resultado se cachea en documents.summary: solo la primera petición paga
+# el coste — clave para corpus extremadamente largos.
+
+# Mismo patrón small-to-big que _SEARCH_SQL: DISTINCT ON evita duplicar el
+# parent por cada child; en modo clásico (parent_id NULL) cae en el chunk.
+_DOC_BLOCKS_SQL = text(
+    """
+    SELECT DISTINCT ON (COALESCE(p.id, c.id))
+           COALESCE(p.parent_index, c.chunk_index) AS orden,
+           COALESCE(p.content, c.content)          AS content
+    FROM chunks c
+    LEFT JOIN parents p ON p.id = c.parent_id
+    WHERE c.document_id = :doc_id
+    ORDER BY COALESCE(p.id, c.id), c.chunk_index
+    """
+)
+
+# Detección de petición de resumen por keywords (conservadora).
+_SUMMARY_RE = re.compile(
+    r"\bres\w*m\w*\b"           # resume, resumen, resúmeme, resumir...
+    r"|\bsinteti\w*\b|\bsumario\b"
+    r"|\bde qu[ée] (trata|va)\b"
+    r"|\bidea general\b|\bpuntos (clave|principales)\b",
+    re.IGNORECASE,
+)
+
+SUMMARY_INSTRUCTIONS = (
+    "Act as a senior university programming professor summarizing a class "
+    "document for students with BASIC programming knowledge: avoid "
+    "unexplained jargon and define every technical term the first time you "
+    "use it, with an everyday analogy if possible.\n"
+    "Write a STRUCTURED SUMMARY in Spanish and Markdown with EXACTLY these "
+    "headings:\n"
+    "1. **Idea general** (2-3 frases)\n"
+    "2. **Temas tratados** (lista)\n"
+    "3. **Puntos clave por tema** (bullets con negrita para los conceptos)\n"
+    "4. **Conclusiones**\n"
+    "Mandatory rules:\n"
+    "- Use ONLY the provided content: do not add outside knowledge.\n"
+    "- Short sentences and simple words.\n"
+    "- If the content looks like only a PART of the document, summarize just "
+    "that part without inventing a global structure.\n"
+    "- Cite the source document in brackets, e.g. [Documento: clase.pdf]."
+)
+
+_REDUCE_PROMPT = """Act as a senior university programming professor.
+Below are partial summaries of consecutive sections of the SAME class
+document. Merge them into ONE structured summary in Spanish and Markdown
+with EXACTLY these headings:
+1. **Idea general** (2-3 frases)
+2. **Temas tratados** (lista)
+3. **Puntos clave por tema** (bullets con negrita para los conceptos; define
+   cada término técnico con palabras simples)
+4. **Conclusiones**
+
+Mandatory rules:
+- Remove duplicates and keep a logical order; do not add outside knowledge.
+- Short sentences and simple words, for students with basic knowledge.
+- Cite the source document in brackets, e.g. [Documento: {filename}].
+
+Document: {filename}
+
+Partial summaries:
+{partials}
+
+Unified summary:"""
+
+
+def is_summary_request(question: str) -> bool:
+    """True si la pregunta parece pedir un resumen del documento/clase."""
+    return bool(_SUMMARY_RE.search(question))
+
+
+def fetch_document_blocks(document_id: int) -> list[str]:
+    """Contenido COMPLETO del documento en orden, usando solo metadatos
+    (sin embeddings): parents en modo small-to-big, chunks en modo clásico.
+
+    Lanza LookupError si el documento no existe o aún no tiene chunks.
+    """
+    with get_engine().connect() as conn:
+        rows = conn.execute(_DOC_BLOCKS_SQL, {"doc_id": document_id}).mappings()
+    blocks = [r["content"] for r in sorted(rows, key=lambda r: r["orden"])]
+    if not blocks:
+        raise LookupError(f"documento {document_id} sin contenido indexado")
+    return blocks
+
+
+def resolve_summary_document(
+    question: str, document_id: int | None
+) -> tuple[int, str] | None:
+    """Resuelve QUÉ documento resumir usando metadatos, en este orden:
+
+    1. document_id explícito (botón del chat) — debe existir y estar ready.
+    2. Filename mencionado en la pregunta (match case-insensitive).
+    3. Documento ready más reciente ("resume el último documento que subí").
+
+    Devuelve (id, filename) o None si no hay candidato.
+    """
+    with get_engine().connect() as conn:
+        if document_id is not None:
+            row = conn.execute(
+                text(
+                    "SELECT id, filename FROM documents"
+                    " WHERE id = :id AND status = 'ready'"
+                ),
+                {"id": document_id},
+            ).mappings().first()
+            return (row["id"], row["filename"]) if row else None
+        rows = list(
+            conn.execute(
+                text(
+                    "SELECT id, filename FROM documents WHERE status = 'ready'"
+                    " ORDER BY created_at DESC"
+                )
+            ).mappings()
+        )
+    q = question.lower()
+    for row in rows:
+        if row["filename"].lower() in q:
+            return row["id"], row["filename"]
+    if rows:
+        return rows[0]["id"], rows[0]["filename"]
+    return None
+
+
+def build_summary_prompt(filename: str, content: str) -> str:
+    """Prompt del map: resumir un bloque (o el documento corto completo)."""
+    return (
+        f"{SUMMARY_INSTRUCTIONS}\n\n"
+        f"Content of the class document ({filename}):\n{content}\n\n"
+        f"Summary:"
+    )
+
+
+def build_reduce_prompt(filename: str, partials: list[str]) -> str:
+    """Prompt del reduce: combinar los resúmenes parciales en uno final."""
+    joined = "\n\n---\n\n".join(
+        f"Part {i}:\n{p}" for i, p in enumerate(partials, 1)
+    )
+    return _REDUCE_PROMPT.format(filename=filename, partials=joined)
+
+
+def summarize_document(document_id: int) -> str:
+    """Resumen de la clase entera por metadatos con map-reduce.
+
+    Sirve la caché de documents.summary si existe; si no, trae el documento
+    completo ordenado, resume grupos de bloques en paralelo (map), combina
+    (reduce) y cachea el resultado. Lanza LookupError si el documento no
+    existe o no tiene contenido.
+    """
+    with get_engine().connect() as conn:
+        row = conn.execute(
+            text("SELECT filename, summary FROM documents WHERE id = :id"),
+            {"id": document_id},
+        ).mappings().first()
+    if row is None:
+        raise LookupError(f"documento {document_id} no existe")
+    if row["summary"]:
+        logger.info("resumen de documento %d servido desde caché", document_id)
+        return row["summary"]
+
+    blocks = fetch_document_blocks(document_id)
+
+    # Agrupar bloques enteros (sin cortar un parent/chunk por la mitad)
+    # hasta el presupuesto de caracteres por llamada del map.
+    groups: list[str] = []
+    current: list[str] = []
+    size = 0
+    for block in blocks:
+        if current and size + len(block) > settings.summary_block_chars:
+            groups.append("\n\n".join(current))
+            current, size = [], 0
+        current.append(block)
+        size += len(block)
+    if current:
+        groups.append("\n\n".join(current))
+
+    logger.info(
+        "resumen documento %d: %d bloques → %d grupos de map",
+        document_id, len(blocks), len(groups),
+    )
+
+    if len(groups) == 1:
+        summary = gemini.generate(build_summary_prompt(row["filename"], groups[0]))
+    else:
+        with ThreadPoolExecutor(max_workers=settings.summary_max_workers) as pool:
+            partials = list(
+                pool.map(
+                    lambda g: gemini.generate(
+                        build_summary_prompt(row["filename"], g)
+                    ),
+                    groups,
+                )
+            )
+        summary = gemini.generate(build_reduce_prompt(row["filename"], partials))
+
+    with get_engine().begin() as conn:
+        conn.execute(
+            text("UPDATE documents SET summary = :s WHERE id = :id"),
+            {"s": summary, "id": document_id},
+        )
+    return summary
 
 
 def sanity_check(answer: str, sources: list[SourceOut]) -> str:
