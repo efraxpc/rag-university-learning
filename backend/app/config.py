@@ -47,7 +47,8 @@ class Settings(BaseSettings):
 
     # RAG
     top_k: int = 4
-    max_output_tokens: int = 1024
+    # 4096: las explicaciones estructuradas con código necesitan más tokens.
+    max_output_tokens: int = 4096
 
     # Small-to-big (optimización pre-retrieval) + ventana deslizante.
     # Se propagan al Job de chunking / subproceso local.
