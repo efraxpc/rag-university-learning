@@ -1,11 +1,14 @@
-"""Cliente de la Gemini API (embeddings + generación).
+"""Cliente de embeddings con la Gemini API (SOLO vectorización).
+
+La generación de texto vive en app/llm.py (Anthropic Claude vía Vertex AI
+Model Garden); Anthropic no tiene modelo de embeddings, así que la
+vectorización se mantiene aquí:
 
 - Por defecto: AI Studio (free tier) con API key.
 - Vertex AI: poner GOOGLE_GENAI_USE_VERTEXAI=true — mismo SDK, autenticación
   por Workload Identity/ADC. Es la ruta de upgrade documentada.
 """
 
-import json
 import logging
 import threading
 
@@ -17,10 +20,9 @@ from .config import settings
 logger = logging.getLogger("rag.gemini")
 
 # Cliente POR HILO: el httpx interno del SDK no es seguro compartiéndolo
-# entre los workers del map paralelo de resúmenes, y cuando el GC cierra
-# una instancia puede cerrar el httpx que otro hilo está usando
-# (RuntimeError: "Cannot send a request, as the client has been closed.",
-# ver https://github.com/googleapis/python-genai/issues/1763).
+# entre hilos (los embeddings se piden también desde el hilo principal y el
+# GC de una instancia puede cerrar el httpx de otra, ver
+# https://github.com/googleapis/python-genai/issues/1763).
 _tls = threading.local()
 
 
@@ -58,71 +60,6 @@ def embed_query(text: str) -> list[float]:
     return embed_texts([text], task_type="RETRIEVAL_QUERY")[0]
 
 
-def _generate_once(prompt: str, model: str | None) -> str:
-    res = get_client().models.generate_content(
-        model=model or settings.gen_model,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            temperature=0.2, max_output_tokens=settings.max_output_tokens
-        ),
-    )
-    return res.text or ""
-
-
-def generate(prompt: str, model: str | None = None) -> str:
-    """Genera texto. `model` permite usar otro modelo distinto de GEN_MODEL
-    (p. ej. el de conocimiento general, GENERAL_MODEL).
-
-    Si el SDK ha cerrado el httpx interno (bug conocido bajo concurrencia),
-    se recrea el cliente del hilo y se reintenta UNA vez.
-    """
-    try:
-        return _generate_once(prompt, model)
-    except RuntimeError as exc:
-        if "client has been closed" not in str(exc):
-            raise
-        logger.warning("cliente httpx del SDK cerrado; recreando y reintentando")
-        _tls.client = None
-        return _generate_once(prompt, model)
-
-
 def vector_to_literal(vec: list[float]) -> str:
     """Convierte un embedding al literal textual que pgvector acepta: '[...]'."""
     return "[" + ",".join(f"{x:.6f}" for x in vec) + "]"
-
-
-_REWRITE_PROMPT = """You are a semantic search optimizer for a RAG system.
-1. Rewrite the user's question so it is clear, self-contained and effective
-   for vector search (fix ambiguities, typos and vague wording).
-2. Generate {n} paraphrased variants of it (multi-query expansion).
-
-Keep the rewritten question and the variants in SPANISH (the indexed
-documents are in Spanish).
-
-Reply ONLY with valid JSON, no extra text and no fences:
-{{"rewritten": "rewritten question", "variants": ["variant 1", "variant 2"]}}
-
-User question: {question}"""
-
-
-def rewrite_and_expand(question: str, n_variants: int) -> dict:
-    """Query rewriting + query expansion en UNA llamada al LLM.
-
-    Devuelve {"rewritten": str, "variants": list[str]}. Si la llamada o el
-    parseo fallan, cae a la pregunta original (la consulta nunca se rompe
-    por culpa de la optimización).
-    """
-    fallback = {"rewritten": question, "variants": []}
-    try:
-        raw = generate(_REWRITE_PROMPT.format(n=n_variants, question=question)).strip()
-        if raw.startswith("```"):  # tolerar fences ```json ... ```
-            raw = raw.strip("`")
-            if raw.lower().startswith("json"):
-                raw = raw[4:]
-        data = json.loads(raw.strip())
-        rewritten = str(data.get("rewritten") or question).strip() or question
-        variants = [str(v).strip() for v in (data.get("variants") or []) if str(v).strip()]
-        return {"rewritten": rewritten, "variants": variants[:n_variants]}
-    except Exception as exc:
-        logger.warning("rewrite_and_expand falló; usando la pregunta original: %s", exc)
-        return fallback

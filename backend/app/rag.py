@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from sqlalchemy import text
 
-from . import gemini
+from . import gemini, llm
 from .config import settings
 from .db import get_engine
 from .schemas import SourceOut
@@ -73,7 +73,7 @@ GENERAL_INSTRUCTIONS = (
     "you use it.\n"
     "ALWAYS start the answer with this exact italic note:\n"
     "*Esta respuesta no proviene de los documentos de la clase; es conocimiento "
-    "general de Gemini.*\n"
+    "general de Claude.*\n"
     "Mandatory rules:\n"
     "- Always respond in Spanish.\n"
     "- Use simple words and short sentences, as if explaining to someone who "
@@ -148,7 +148,7 @@ def _candidate_queries(question: str) -> list[str]:
     """
     if not (settings.query_rewrite or settings.query_expansion):
         return [question]
-    result = gemini.rewrite_and_expand(question, settings.expansion_variants)
+    result = llm.rewrite_and_expand(question, settings.expansion_variants)
     if settings.query_rewrite and settings.query_expansion:
         queries = [result["rewritten"], *result["variants"]]
     elif settings.query_rewrite:
@@ -415,18 +415,20 @@ def summarize_document(document_id: int) -> str:
     )
 
     if len(groups) == 1:
-        summary = gemini.generate(build_summary_prompt(row["filename"], groups[0]))
+        summary = llm.generate(build_summary_prompt(row["filename"], groups[0]))
     else:
+        # Map con FAST_MODEL (volumen barato); reduce con GEN_MODEL (calidad).
         with ThreadPoolExecutor(max_workers=settings.summary_max_workers) as pool:
             partials = list(
                 pool.map(
-                    lambda g: gemini.generate(
-                        build_summary_prompt(row["filename"], g)
+                    lambda g: llm.generate(
+                        build_summary_prompt(row["filename"], g),
+                        model=settings.fast_model,
                     ),
                     groups,
                 )
             )
-        summary = gemini.generate(build_reduce_prompt(row["filename"], partials))
+        summary = llm.generate(build_reduce_prompt(row["filename"], partials))
 
     with get_engine().begin() as conn:
         conn.execute(

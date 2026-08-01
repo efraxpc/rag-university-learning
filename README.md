@@ -1,8 +1,9 @@
-# RAG University — RAG en GCP con GKE + Cloud SQL (pgvector) + Gemini API
+# RAG University — RAG en GCP con GKE + Cloud SQL (pgvector) + Claude (Model Garden)
 
 Búsqueda conversacional sobre tus documentos (PDF/TXT/MD): FastAPI + Next.js en
 **GKE Autopilot**, vectores en **Cloud SQL PostgreSQL + pgvector** (HNSW),
-embeddings y generación con la **Gemini API**. Coste objetivo: **~15–35 $/mes**.
+embeddings con la **Gemini API** y generación con **Anthropic Claude Fable 5
+vía Vertex AI Model Garden**. Coste objetivo: **~15–35 $/mes**.
 
 La arquitectura completa (decisiones, diagrama, diseño y validación) está en
 [`solution-architecture-guide.md`](solution-architecture-guide.md) y el diagrama
@@ -23,7 +24,9 @@ scripts/    deploy.sh, session-start/end.sh (runbook de costes), validate.*
 
 **Prerequisitos**: `gcloud`, `terraform` ≥ 1.6, `kubectl`, `cloud-sql-proxy`,
 `psql`; un proyecto GCP con facturación; **alerta de presupuesto** creada;
-API key de Gemini en https://aistudio.google.com/apikey.
+API key de Gemini (embeddings) en https://aistudio.google.com/apikey;
+**Claude Fable 5 habilitado en Model Garden** del proyecto (consola de
+Vertex AI) para la generación.
 
 ```bash
 # 1. Variables

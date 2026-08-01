@@ -14,7 +14,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException
 
-from .. import gemini, rag
+from .. import llm, rag
 from ..config import settings
 from ..schemas import QueryIn, QueryOut
 
@@ -26,13 +26,13 @@ router = APIRouter(tags=["query"])
 def _generate_general(prompt: str) -> str:
     """Genera con GENERAL_MODEL; si no está disponible, cae a GEN_MODEL."""
     try:
-        return gemini.generate(prompt, model=settings.general_model)
+        return llm.generate(prompt, model=settings.general_model)
     except Exception:
         logger.warning(
             "GENERAL_MODEL %r no disponible; usando GEN_MODEL %r",
             settings.general_model, settings.gen_model,
         )
-        return gemini.generate(prompt)
+        return llm.generate(prompt)
 
 
 @router.post("/query")
@@ -72,14 +72,14 @@ def query(body: QueryIn) -> QueryOut:
     try:
         if rag.has_answer(sources):
             # 1) Respuesta basada en el contenido de la clase (RAG).
-            answer = rag.sanity_check(gemini.generate(rag.build_prompt(question, sources)), sources)
+            answer = rag.sanity_check(llm.generate(rag.build_prompt(question, sources)), sources)
             # 2) Complemento de conocimiento general. Si falla, se devuelve
             #    solo la respuesta RAG (nunca se pierde la respuesta).
             try:
                 complement = _generate_general(rag.build_complement_prompt(question, answer)).strip()
                 if complement:
                     answer += (
-                        "\n\n---\n\n## Complemento de Gemini (conocimiento general)\n\n"
+                        "\n\n---\n\n## Complemento de Claude (conocimiento general)\n\n"
                         + complement
                     )
             except Exception:
@@ -92,5 +92,5 @@ def query(body: QueryIn) -> QueryOut:
     except HTTPException:
         raise
     except Exception as exc:
-        logger.exception("Error llamando a la Gemini API")
-        raise HTTPException(502, f"Error llamando a la Gemini API: {exc}") from exc
+        logger.exception("Error llamando al LLM")
+        raise HTTPException(502, f"Error llamando al LLM: {exc}") from exc

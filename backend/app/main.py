@@ -1,7 +1,7 @@
 """API orquestadora del RAG (FastAPI).
 
 Flujo A (ingesta):  POST /documents → GCS + metadata + Job de chunking
-Flujo B (consulta): POST /query     → búsqueda híbrida → prompt aumentado → Gemini
+Flujo B (consulta): POST /query     → búsqueda híbrida → prompt aumentado → Claude
 """
 
 import logging

@@ -36,3 +36,7 @@ skills-lock.json
 
 # SO
 .DS_Store
+
+# Google Cloud SDK local (se instala en $HOME, no en el repo)
+google-cloud-sdk/
+google-cloud-cli-*.tar.gz

@@ -49,13 +49,19 @@ load_config() {
   QUERY_REWRITE="${_SAVED_QUERY_REWRITE:-${QUERY_REWRITE:-true}}"
   QUERY_EXPANSION="${_SAVED_QUERY_EXPANSION:-${QUERY_EXPANSION:-true}}"
   EXPANSION_VARIANTS="${_SAVED_EXPANSION_VARIANTS:-${EXPANSION_VARIANTS:-3}}"
+  GEN_MODEL="${GEN_MODEL:-claude-fable-5}"
+  GENERAL_MODEL="${GENERAL_MODEL:-claude-fable-5}"
+  FAST_MODEL="${FAST_MODEL:-claude-haiku-4-5}"
+  ANTHROPIC_VERTEX_REGION="${ANTHROPIC_VERTEX_REGION:-global}"
   export GEMINI_API_KEY="${GEMINI_API_KEY:?define GEMINI_API_KEY en el entorno o en .env (ver .env.example)}"
-  export EMBEDDING_MODEL EMBEDDING_DIMS GEN_MODEL
+  export PROJECT_ID="${PROJECT_ID:?define PROJECT_ID en el entorno o en .env (lo usa AnthropicVertex; ver .env.example)}"
+  export EMBEDDING_MODEL EMBEDDING_DIMS GEN_MODEL GENERAL_MODEL FAST_MODEL ANTHROPIC_VERTEX_REGION
   export SMALL_TO_BIG PARENT_CHUNK_SIZE PARENT_CHUNK_OVERLAP SMALL_CHUNK_SIZE SMALL_CHUNK_OVERLAP
   export QUERY_REWRITE QUERY_EXPANSION EXPANSION_VARIANTS
   export DATABASE_URL="postgresql+pg8000://app:app@127.0.0.1:${PGPORT}/ragdb"
   export BUCKET_NAME=""   # vacío = modo local (sin GCS ni Jobs de K8s)
-  echo "==> modelos: embeddings=$EMBEDDING_MODEL ($EMBEDDING_DIMS dims) · generación=$GEN_MODEL"
+  echo "==> modelos: embeddings=$EMBEDDING_MODEL ($EMBEDDING_DIMS dims) · generación=$GEN_MODEL · auxiliar=$FAST_MODEL"
+  echo "==> anthropic vertex: región=$ANTHROPIC_VERTEX_REGION · proyecto=$PROJECT_ID (ADC: gcloud auth application-default login)"
   echo "==> chunking: small_to_big=$SMALL_TO_BIG · parent=$PARENT_CHUNK_SIZE/$PARENT_CHUNK_OVERLAP · child=$SMALL_CHUNK_SIZE/$SMALL_CHUNK_OVERLAP"
   echo "==> query opt: rewrite=$QUERY_REWRITE · expansion=$QUERY_EXPANSION (x$EXPANSION_VARIANTS)"
 }

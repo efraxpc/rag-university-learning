@@ -4,6 +4,7 @@ SQLAlchemy>=2.0
 pg8000>=1.31
 cloud-sql-python-connector[pg8000]>=1.13
 google-genai>=1.0
+anthropic[vertex]>=0.69
 google-cloud-storage>=2.18
 kubernetes>=30.0
 pydantic-settings>=2.4

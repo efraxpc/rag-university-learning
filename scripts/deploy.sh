@@ -8,12 +8,18 @@ cd "$(dirname "$0")/.."
 export PROJECT_ID="${PROJECT_ID:?export PROJECT_ID=tu-proyecto}"
 export REGION="${REGION:-us-central1}"
 
-# Modelos de la Gemini API (mismos defaults que .env.example). Se inyectan
-# en los Deployments/Jobs vía envsubst. OJO: EMBEDDING_DIMS debe coincidir
-# con vector(N) de scripts/init_db.sql (HNSW soporta máx. 2000 dims).
+# Modelos (mismos defaults que .env.example). Se inyectan en los
+# Deployments/Jobs vía envsubst. OJO: EMBEDDING_DIMS debe coincidir con
+# vector(N) de scripts/init_db.sql (HNSW soporta máx. 2000 dims).
 export EMBEDDING_MODEL="${EMBEDDING_MODEL:-text-embedding-005}"
 export EMBEDDING_DIMS="${EMBEDDING_DIMS:-1536}"
-export GEN_MODEL="${GEN_MODEL:-gemini-2.5-flash}"
+# Generación: Anthropic Claude vía Vertex AI Model Garden (app/llm.py).
+# Requiere el modelo habilitado en Model Garden (consola) — terraform solo
+# da la API de Vertex y el rol roles/aiplatform.user a la GSA.
+export GEN_MODEL="${GEN_MODEL:-claude-fable-5}"
+export GENERAL_MODEL="${GENERAL_MODEL:-claude-fable-5}"
+export FAST_MODEL="${FAST_MODEL:-claude-haiku-4-5}"
+export ANTHROPIC_VERTEX_REGION="${ANTHROPIC_VERTEX_REGION:-global}"
 # Small-to-big (pre-retrieval) + ventana deslizante (ver .env.example).
 export SMALL_TO_BIG="${SMALL_TO_BIG:-true}"
 export PARENT_CHUNK_SIZE="${PARENT_CHUNK_SIZE:-1024}"

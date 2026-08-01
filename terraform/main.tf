@@ -28,6 +28,7 @@ locals {
     "artifactregistry.googleapis.com",
     "iam.googleapis.com",
     "cloudbuild.googleapis.com",
+    "aiplatform.googleapis.com", # Vertex AI Model Garden (generación Claude)
   ]
 }
 
@@ -200,6 +201,13 @@ resource "google_storage_bucket_iam_member" "rag_object_user" {
 resource "google_project_iam_member" "rag_cloudsql_client" {
   project = var.project_id
   role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${google_service_account.rag.email}"
+}
+
+# Vertex AI Model Garden: generación con Claude (AnthropicVertex, ver backend/app/llm.py).
+resource "google_project_iam_member" "rag_aiplatform_user" {
+  project = var.project_id
+  role    = "roles/aiplatform.user"
   member  = "serviceAccount:${google_service_account.rag.email}"
 }
 

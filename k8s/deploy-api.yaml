@@ -40,6 +40,12 @@ spec:
               value: "${EMBEDDING_DIMS}"
             - name: GEN_MODEL
               value: "${GEN_MODEL}"
+            - name: GENERAL_MODEL
+              value: "${GENERAL_MODEL}"
+            - name: FAST_MODEL
+              value: "${FAST_MODEL}"
+            - name: ANTHROPIC_VERTEX_REGION
+              value: "${ANTHROPIC_VERTEX_REGION}"
             - name: SMALL_TO_BIG
               value: "${SMALL_TO_BIG}"
             - name: PARENT_CHUNK_SIZE
