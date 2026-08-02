@@ -8,8 +8,8 @@ Estrategia de respuesta:
   búsqueda vectorial).
 - Si los documentos responden a la pregunta (distancia <= MAX_DISTANCE):
   respuesta basada en el contenido de la clase + complemento de conocimiento
-  general con GENERAL_MODEL.
-- Si no: respuesta SOLO de conocimiento general (GENERAL_MODEL), sin fuentes.
+  general con el rol "general" del motor activo.
+- Si no: respuesta SOLO de conocimiento general (rol "general"), sin fuentes.
 """
 
 import logging
@@ -26,14 +26,11 @@ router = APIRouter(tags=["query"])
 
 
 def _generate_general(prompt: str) -> str:
-    """Genera con GENERAL_MODEL; si no está disponible, cae a GEN_MODEL."""
+    """Genera con el rol "general"; si no está disponible, cae al rol "gen"."""
     try:
-        return llm.generate(prompt, model=settings.general_model)
+        return llm.generate(prompt, role="general")
     except Exception:
-        logger.warning(
-            "GENERAL_MODEL %r no disponible; usando GEN_MODEL %r",
-            settings.general_model, settings.gen_model,
-        )
+        logger.warning("el modelo del rol 'general' no está disponible; usando el rol 'gen'")
         return llm.generate(prompt)
 
 

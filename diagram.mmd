@@ -12,11 +12,11 @@ flowchart LR
         GCS[("Cloud Storage<br/>documentos crudos")]
         DB[("Cloud SQL PostgreSQL + pgvector<br/>IP privada · índice HNSW")]
         SM["Secret Manager<br/>API keys (Gemini · Anthropic)<br/>password DB"]
-        GEM["Gemini API<br/>SOLO embeddings<br/>AI Studio free tier → Vertex AI"]
+        GEM["Gemini API<br/>embeddings (siempre)<br/>+ generación si LLM_PROVIDER=gemini<br/>AI Studio free tier → Vertex AI"]
         OBS["Cloud Logging + Monitoring<br/>+ Query Insights"]
     end
 
-    LLM["Anthropic Claude (generación)<br/>patrón Strategy por LLM_PROVIDER:<br/>API directa (default) ·<br/>Vertex AI Model Garden<br/>Fable 5 (respuestas) · Haiku 4.5 (auxiliar)"]
+    LLM["Motor de generación (Strategy por<br/>LLM_PROVIDER): Anthropic API directa<br/>(default) · Anthropic Vertex Model<br/>Garden · Google Gemini<br/>modelos por rol (gen/general/fast)<br/>en el catálogo de cada estrategia"]
 
     %% Flujo A: ingesta (bajo demanda)
     FE -->|"POST /documents"| API

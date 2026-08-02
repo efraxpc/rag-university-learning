@@ -38,12 +38,6 @@ spec:
               value: "${EMBEDDING_MODEL}"
             - name: EMBEDDING_DIMS
               value: "${EMBEDDING_DIMS}"
-            - name: GEN_MODEL
-              value: "${GEN_MODEL}"
-            - name: GENERAL_MODEL
-              value: "${GENERAL_MODEL}"
-            - name: FAST_MODEL
-              value: "${FAST_MODEL}"
             - name: LLM_PROVIDER
               value: "${LLM_PROVIDER}"
             - name: ANTHROPIC_VERTEX_REGION

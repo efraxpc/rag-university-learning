@@ -1,8 +1,8 @@
-"""Cliente de embeddings con la Gemini API (SOLO vectorización).
+"""Cliente de la Gemini API: embeddings SIEMPRE + generación opcional.
 
-La generación de texto vive en app/llm.py (Anthropic Claude, vía API directa
-o Vertex AI Model Garden según LLM_PROVIDER); Anthropic no tiene modelo de
-embeddings, así que la vectorización se mantiene aquí:
+La vectorización vive aquí (Anthropic no tiene modelo de embeddings). La
+generación de texto vive en app/llm.py, que reutiliza `new_client()` cuando
+`LLM_PROVIDER=gemini` (patrón Strategy).
 
 - Por defecto: AI Studio (free tier) con API key.
 - Vertex AI: poner GOOGLE_GENAI_USE_VERTEXAI=true — mismo SDK, autenticación
@@ -26,7 +26,9 @@ logger = logging.getLogger("rag.gemini")
 _tls = threading.local()
 
 
-def _new_client() -> genai.Client:
+def new_client() -> genai.Client:
+    """Construye un cliente google-genai (AI Studio o Vertex AI). También la
+    usa app/llm.py para la estrategia de generación Gemini."""
     if settings.google_genai_use_vertexai.lower() == "true":
         return genai.Client(
             vertexai=True, project=settings.project_id, location=settings.region
@@ -37,7 +39,7 @@ def _new_client() -> genai.Client:
 def get_client() -> genai.Client:
     client = getattr(_tls, "client", None)
     if client is None:
-        client = _new_client()
+        client = new_client()
         _tls.client = client
     return client
 

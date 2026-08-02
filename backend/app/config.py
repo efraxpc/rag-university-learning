@@ -45,25 +45,22 @@ class Settings(BaseSettings):
     # HNSW/IVFFlat a 2000 dims → 1536 es el máximo seguro recomendado.
     embedding_dims: int = 1536
 
-    # Generación: Anthropic Claude con dos proveedores intercambiables
-    # (patrón Strategy, ver app/llm.py):
+    # Generación con motor seleccionable (patrón Strategy, ver app/llm.py):
     # - "anthropic" (DEFAULT): API directa de Anthropic; requiere
     #   ANTHROPIC_API_KEY (https://console.anthropic.com/).
     # - "vertex": Vertex AI Model Garden (SDK anthropic[vertex]);
     #   autenticación por ADC en local (gcloud auth application-default
     #   login) / Workload Identity en GKE, y el modelo habilitado en
     #   Model Garden del proyecto.
+    # - "gemini": Google Gemini; reutiliza el cliente de app/gemini.py
+    #   (GEMINI_API_KEY en AI Studio, o GOOGLE_GENAI_USE_VERTEXAI=true
+    #   para Vertex AI con Workload Identity/ADC).
+    # Los modelos NO se configuran por entorno: se resuelven en código por
+    # ROL (gen/general/fast) con el catálogo MODELS de cada estrategia en
+    # app/llm.py — el .env solo elige el motor.
     llm_provider: str = "anthropic"
     anthropic_api_key: str = ""  # secret: anthropic-api-key (solo provider=anthropic)
     anthropic_vertex_region: str = "global"  # Fable 5: endpoint global/us/eu
-    gen_model: str = "claude-fable-5"
-    # Modelo de conocimiento general: complementa la respuesta RAG cuando el
-    # tema SÍ está en los documentos y responde solo cuando NO está. Si el
-    # modelo no está disponible se cae a gen_model (ver routers/query.py).
-    general_model: str = "claude-fable-5"
-    # Modelo auxiliar barato para llamadas de volumen: query rewrite/expansion
-    # y el map paralelo de resúmenes (el reduce usa gen_model).
-    fast_model: str = "claude-haiku-4-5"
 
     # RAG
     top_k: int = 4
@@ -81,7 +78,7 @@ class Settings(BaseSettings):
 
     # Resumen de clase entera (map-reduce por metadatos, ver rag.py).
     # Tamaño de bloque del map en caracteres (~6-8k tokens: seguro y rápido
-    # por llamada con FAST_MODEL) y paralelismo del map.
+    # por llamada con el rol "fast") y paralelismo del map.
     summary_block_chars: int = 24000
     summary_max_workers: int = 4
 

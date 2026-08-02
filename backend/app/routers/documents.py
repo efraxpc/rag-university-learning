@@ -156,8 +156,9 @@ def list_documents() -> list[DocumentOut]:
 
 
 # Generación perezosa de títulos (documents.title): al listar, cada documento
-# ready sin título dispara un hilo en background que lo genera con FAST_MODEL
-# (ver rag.generate_title); en el siguiente refresco del frontend ya aparece.
+# ready sin título dispara un hilo en background que lo genera con el rol
+# "fast" (ver rag.generate_title); en el siguiente refresco del frontend ya
+# aparece.
 # Los errores solo se loguean: nunca rompen el listado y se reintenta después.
 _titles_in_flight: set[int] = set()
 _titles_lock = threading.Lock()

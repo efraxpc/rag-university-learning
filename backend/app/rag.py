@@ -450,8 +450,8 @@ def build_title_prompt(filename: str, content: str) -> str:
 def generate_title(document_id: int) -> str:
     """Genera y cachea el título de la clase (documents.title).
 
-    Usa el inicio del contenido (fetch_document_blocks, sin embeddings) y
-    FAST_MODEL: una sola llamada barata por documento, ever. Lanza
+    Usa el inicio del contenido (fetch_document_blocks, sin embeddings) y el
+    rol "fast": una sola llamada barata por documento, ever. Lanza
     LookupError si el documento no tiene contenido.
     """
     blocks = fetch_document_blocks(document_id)
@@ -462,7 +462,7 @@ def generate_title(document_id: int) -> str:
         ).scalar_one()
     raw = llm.generate(
         build_title_prompt(filename, blocks[0][:_TITLE_CONTENT_CHARS]),
-        model=settings.fast_model,
+        role="fast",
     )
     # Saneado: una sola línea, sin comillas ni punto final, largo acotado.
     title = raw.strip().splitlines()[0].strip().strip('"\'').rstrip(".")[:120]
@@ -533,13 +533,13 @@ def summarize_document(document_id: int) -> str:
             max_tokens=settings.summary_max_output_tokens,
         )
     else:
-        # Map con FAST_MODEL (volumen barato); reduce con GEN_MODEL (calidad).
+        # Map con el rol "fast" (volumen barato); reduce con "gen" (calidad).
         with ThreadPoolExecutor(max_workers=settings.summary_max_workers) as pool:
             partials = list(
                 pool.map(
                     lambda g: llm.generate(
                         build_summary_prompt(row["filename"], g),
-                        model=settings.fast_model,
+                        role="fast",
                     ),
                     groups,
                 )
@@ -572,8 +572,8 @@ def summarize_documents(document_ids: list[int]) -> str:
 
     Estrategia: cada documento se resume con `summarize_document` (reutiliza
     la caché de documents.summary) y, si hay más de uno, un reduce final con
-    GEN_MODEL fusiona los resúmenes citando cada fuente. El resumen combinado
-    NO se cachea: es una sola llamada sobre resúmenes ya cacheados.
+    el rol "gen" fusiona los resúmenes citando cada fuente. El resumen
+    combinado NO se cachea: es una sola llamada sobre resúmenes ya cacheados.
 
     Lanza LookupError si la selección está vacía o algún documento no existe
     o no está listo.

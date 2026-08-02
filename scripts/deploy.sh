@@ -13,15 +13,14 @@ export REGION="${REGION:-us-central1}"
 # vector(N) de scripts/init_db.sql (HNSW soporta máx. 2000 dims).
 export EMBEDDING_MODEL="${EMBEDDING_MODEL:-text-embedding-005}"
 export EMBEDDING_DIMS="${EMBEDDING_DIMS:-1536}"
-# Generación: Anthropic Claude con doble proveedor (patrón Strategy,
-# backend/app/llm.py): "anthropic" = API directa (requiere el secreto
-# anthropic-api-key en Secret Manager); "vertex" = Model Garden (requiere el
-# modelo habilitado en la consola — terraform solo da la API de Vertex y el
-# rol roles/aiplatform.user a la GSA).
+# Generación con motor seleccionable (patrón Strategy, backend/app/llm.py):
+# "anthropic" = API directa (requiere el secreto anthropic-api-key en Secret
+# Manager); "vertex" = Model Garden (requiere el modelo habilitado en la
+# consola — terraform solo da la API de Vertex y el rol roles/aiplatform.user
+# a la GSA); "gemini" = Google Gemini (GEMINI_API_KEY o Vertex con
+# GOOGLE_GENAI_USE_VERTEXAI=true). Los modelos los resuelve el código por
+# ROL (gen/general/fast) según el motor: no se configuran aquí.
 export LLM_PROVIDER="${LLM_PROVIDER:-anthropic}"
-export GEN_MODEL="${GEN_MODEL:-claude-fable-5}"
-export GENERAL_MODEL="${GENERAL_MODEL:-claude-fable-5}"
-export FAST_MODEL="${FAST_MODEL:-claude-haiku-4-5}"
 export ANTHROPIC_VERTEX_REGION="${ANTHROPIC_VERTEX_REGION:-global}"
 # Small-to-big (pre-retrieval) + ventana deslizante (ver .env.example).
 export SMALL_TO_BIG="${SMALL_TO_BIG:-true}"

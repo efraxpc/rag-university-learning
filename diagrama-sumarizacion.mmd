@@ -5,7 +5,7 @@
 flowchart TD
     A["Usuario: botón ✨ Resumir clase<br/>(checkboxes: 1..N clases o 'todas las clases')<br/>o pregunta con keywords ('resume', 'de qué trata'…)"] --> B["POST /query<br/>question + document_ids / document_id + summarize"]
     B --> C{"routers/query.py<br/>¿summarize=true o<br/>is_summary_request()?"}
-    C -- "No" --> Z["Flujo RAG normal<br/>(rewrite + expansión → HNSW top-k → Claude)"]
+    C -- "No" --> Z["Flujo RAG normal<br/>(rewrite + expansión → HNSW top-k → LLM)"]
     C -- "Sí" --> D0{"¿document_ids<br/>(selección del chat)?"}
 
     %% Rama multi-documento (selección del usuario)
@@ -13,7 +13,7 @@ flowchart TD
     MS --> MS1{"¿Cuántos<br/>documentos?"}
     MS1 -- "1" --> F
     MS1 -- "N" --> MP["Resumen POR DOCUMENTO en paralelo<br/>(ThreadPoolExecutor, caché o map-reduce<br/>de cada uno, ver rama inferior)"]
-    MP --> MR["REDUCE FINAL multi-documento (GEN_MODEL)<br/>build_multi_reduce_prompt(): fusiona los<br/>resúmenes citando cada fuente [Documento: X]<br/>NO se cachea (1 llamada sobre cachés)"]
+    MP --> MR["REDUCE FINAL multi-documento (rol 'gen')<br/>build_multi_reduce_prompt(): fusiona los<br/>resúmenes citando cada fuente [Documento: X]<br/>NO se cachea (1 llamada sobre cachés)"]
     MR --> P
 
     %% Rama single-documento (por metadatos)
@@ -27,9 +27,9 @@ flowchart TD
     G -- "No" --> I["fetch_document_blocks()<br/>SQL solo por metadatos (SIN embeddings):<br/>COALESCE(parent, chunk) ordenado por<br/>parent_index / chunk_index"]
     I --> J["Agrupar bloques enteros hasta<br/>SUMMARY_BLOCK_CHARS (24 000 chars)"]
     J --> K{"¿Cuántos<br/>grupos?"}
-    K -- "1 grupo" --> L["1 llamada a Claude (GEN_MODEL)<br/>build_summary_prompt()"]
-    K -- "N grupos" --> M["MAP paralelo: ThreadPoolExecutor<br/>SUMMARY_MAX_WORKERS = 4<br/>resumen parcial por grupo (FAST_MODEL, Haiku 4.5)"]
-    M --> N["REDUCE: build_reduce_prompt()<br/>fusiona parciales en resumen final (GEN_MODEL, Fable 5)"]
+    K -- "1 grupo" --> L["1 llamada al LLM (rol 'gen')<br/>build_summary_prompt()"]
+    K -- "N grupos" --> M["MAP paralelo: ThreadPoolExecutor<br/>SUMMARY_MAX_WORKERS = 4<br/>resumen parcial por grupo (rol 'fast')"]
+    M --> N["REDUCE: build_reduce_prompt()<br/>fusiona parciales en resumen final (rol 'gen')"]
     L --> O["UPDATE documents<br/>SET summary = resultado<br/>(caché: se calcula una sola vez)"]
     N --> O
     O --> P["sanity_check() → QueryOut<br/>(answer Markdown, sources=[])"]
