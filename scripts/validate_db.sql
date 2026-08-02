@@ -9,14 +9,20 @@ SELECT column_name, data_type FROM information_schema.columns
 WHERE table_name = 'chunks' ORDER BY ordinal_position;
 
 -- 3b'. Esquema de documents: debe incluir las columnas summary (caché de
--- resúmenes) y title (título auto-generado de la clase)
+-- resúmenes), title (título auto-generado de la clase) y session_id (FK a
+-- la sesión de chat a la que pertenece el documento)
 SELECT column_name, data_type FROM information_schema.columns
 WHERE table_name = 'documents' ORDER BY ordinal_position;
+
+-- 3b''. Esquema de sessions (sesiones de chat que agrupan documentos)
+SELECT column_name, data_type FROM information_schema.columns
+WHERE table_name = 'sessions' ORDER BY ordinal_position;
 
 SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'chunks';
 
 -- 3c. Contenido tras la ingesta (modelo small-to-big)
 SELECT
+  (SELECT count(*) FROM sessions)  AS sesiones,
   (SELECT count(*) FROM documents) AS documentos,
   (SELECT count(*) FROM parents)   AS parents,
   (SELECT count(*) FROM chunks)    AS chunks,

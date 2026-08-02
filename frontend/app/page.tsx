@@ -1,31 +1,21 @@
 "use client";
 
-import { useState } from "react";
-import Chat from "../components/Chat";
-import Sidebar from "../components/Sidebar";
+import SessionList from "../components/SessionList";
 
+// Home: listado de sesiones (notebooks) de estudio.
 export default function Home() {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-
   return (
-    <div className="flex h-screen bg-slate-50 text-slate-900">
-      {/* overlay móvil */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 z-20 bg-black/30 md:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
-      <div
-        className={`fixed z-30 h-full transform transition-transform duration-200 md:static md:translate-x-0 ${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
-      >
-        <Sidebar />
+    <div className="min-h-screen bg-slate-50 text-slate-900">
+      <div className="mx-auto max-w-3xl px-4 py-10">
+        <header className="mb-8 flex items-center gap-3">
+          <span className="text-4xl">🎓</span>
+          <div>
+            <h1 className="text-xl font-semibold">RAG University</h1>
+            <p className="text-sm text-slate-500">Tus sesiones de estudio</p>
+          </div>
+        </header>
+        <SessionList />
       </div>
-      <main className="flex min-w-0 flex-1 flex-col">
-        <Chat onToggleSidebar={() => setSidebarOpen((v) => !v)} />
-      </main>
     </div>
   );
 }

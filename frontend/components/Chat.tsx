@@ -42,7 +42,13 @@ function SourcesList({ sources }: { sources: Source[] }) {
   );
 }
 
-export default function Chat({ onToggleSidebar }: { onToggleSidebar: () => void }) {
+export default function Chat({
+  sessionId,
+  onToggleSidebar,
+}: {
+  sessionId: number;
+  onToggleSidebar: () => void;
+}) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -83,6 +89,7 @@ export default function Chat({ onToggleSidebar }: { onToggleSidebar: () => void 
         opts?.documentId,
         opts?.summarize ?? false,
         opts?.documentIds,
+        sessionId,
       );
       setMessages((m) => [
         ...m,
@@ -111,7 +118,7 @@ export default function Chat({ onToggleSidebar }: { onToggleSidebar: () => void 
     setSummaryDocs(null);
     setSelectedIds(new Set());
     try {
-      const docs = await listDocuments();
+      const docs = await listDocuments(sessionId);
       setSummaryDocs(docs.filter((d) => d.status === "ready"));
     } catch {
       setSummaryDocs([]);

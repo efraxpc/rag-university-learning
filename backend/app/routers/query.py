@@ -46,7 +46,7 @@ def query(body: QueryIn) -> QueryOut:
         # Selección múltiple de clases (checkboxes del chat, incluida "todas").
         if body.document_ids:
             try:
-                answer = rag.summarize_documents(body.document_ids)
+                answer = rag.summarize_documents(body.document_ids, body.session_id)
             except LookupError as exc:
                 raise HTTPException(
                     404, "Algún documento seleccionado no existe o aún no está listo."
@@ -57,7 +57,7 @@ def query(body: QueryIn) -> QueryOut:
                     502, f"Error generando el resumen: {exc}"
                 ) from exc
             return QueryOut(answer=rag.sanity_check(answer, []), sources=[])
-        resolved = rag.resolve_summary_document(question, body.document_id)
+        resolved = rag.resolve_summary_document(question, body.document_id, body.session_id)
         if resolved is not None:
             doc_id, _filename = resolved
             try:
@@ -77,7 +77,7 @@ def query(body: QueryIn) -> QueryOut:
         # Keyword sin documento resoluble → cae al flujo RAG normal.
 
     try:
-        sources = rag.hybrid_search(question, body.document_id)
+        sources = rag.hybrid_search(question, body.document_id, body.session_id)
     except Exception as exc:
         logger.exception("Error en la búsqueda vectorial")
         raise HTTPException(502, f"Error en la búsqueda vectorial: {exc}") from exc

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { listDocuments, uploadDocument, deleteDocument, type Doc } from "../lib/api";
 
 const STATUS: Record<Doc["status"], { label: string; classes: string; pulse?: boolean }> = {
@@ -9,7 +10,7 @@ const STATUS: Record<Doc["status"], { label: string; classes: string; pulse?: bo
   error: { label: "error", classes: "bg-rose-100 text-rose-700" },
 };
 
-export default function Sidebar() {
+export default function Sidebar({ sessionId }: { sessionId: number }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [docs, setDocs] = useState<Doc[]>([]);
   const [busy, setBusy] = useState(false);
@@ -19,11 +20,11 @@ export default function Sidebar() {
 
   const refresh = useCallback(async () => {
     try {
-      setDocs(await listDocuments());
+      setDocs(await listDocuments(sessionId));
     } catch {
       // API aún no disponible; se reintenta al pulsar "actualizar".
     }
-  }, []);
+  }, [sessionId]);
 
   useEffect(() => {
     refresh();
@@ -42,7 +43,7 @@ export default function Sidebar() {
     setBusy(true);
     setError(null);
     try {
-      await uploadDocument(file);
+      await uploadDocument(file, sessionId);
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error desconocido");
@@ -70,11 +71,19 @@ export default function Sidebar() {
 
   return (
     <aside className="flex h-full w-72 flex-col border-r border-slate-200 bg-white">
-      <div className="flex items-center gap-3 border-b border-slate-200 px-5 py-4">
-        <span className="text-2xl">🎓</span>
-        <div>
-          <h1 className="text-sm font-semibold">RAG University</h1>
-          <p className="text-xs text-slate-500">chat con tus documentos</p>
+      <div className="border-b border-slate-200 px-5 py-4">
+        <Link
+          href="/"
+          className="mb-2 inline-block text-xs text-blue-600 hover:underline"
+        >
+          ← Sesiones
+        </Link>
+        <div className="flex items-center gap-3">
+          <span className="text-2xl">🎓</span>
+          <div>
+            <h1 className="text-sm font-semibold">RAG University</h1>
+            <p className="text-xs text-slate-500">chat con tus documentos</p>
+          </div>
         </div>
       </div>
 

@@ -131,7 +131,8 @@ _SEARCH_SQL = text(
         FROM chunks c
         LEFT JOIN parents p ON p.id = c.parent_id
         JOIN documents d ON d.id = c.document_id
-        WHERE CAST(:doc_id AS INTEGER) IS NULL OR c.document_id = CAST(:doc_id AS INTEGER)
+        WHERE (CAST(:doc_id AS INTEGER) IS NULL OR c.document_id = CAST(:doc_id AS INTEGER))
+          AND (CAST(:session_id AS INTEGER) IS NULL OR d.session_id = CAST(:session_id AS INTEGER))
         ORDER BY COALESCE(p.id, c.id), c.embedding <=> CAST(:qvec AS vector)
     ) best_per_parent
     ORDER BY distance
@@ -164,19 +165,25 @@ def _candidate_queries(question: str) -> list[str]:
     return queries
 
 
-def _search_one(conn, qvec: str, document_id: int | None) -> list[SourceOut]:
+def _search_one(
+    conn, qvec: str, document_id: int | None, session_id: int | None
+) -> list[SourceOut]:
     rows = conn.execute(
-        _SEARCH_SQL, {"qvec": qvec, "doc_id": document_id, "k": settings.top_k}
+        _SEARCH_SQL,
+        {"qvec": qvec, "doc_id": document_id, "session_id": session_id, "k": settings.top_k},
     ).mappings()
     return [SourceOut(**row) for row in rows]
 
 
-def hybrid_search(question: str, document_id: int | None) -> list[SourceOut]:
+def hybrid_search(
+    question: str, document_id: int | None, session_id: int | None = None
+) -> list[SourceOut]:
     """Búsqueda semántica top-k (coseno, índice HNSW) + filtro por metadatos.
 
     - Pre-retrieval: rewriting + multi-query expansion (según flags).
     - Small-to-big: devuelve el contenido del parent aunque el match sea en un child.
     - Fusión multi-query: unión por parent quedándose con la mínima distancia.
+    - session_id: acota la búsqueda a los documentos de la sesión.
     """
     queries = _candidate_queries(question)
     vectors = gemini.embed_texts(queries, task_type="RETRIEVAL_QUERY")
@@ -184,7 +191,7 @@ def hybrid_search(question: str, document_id: int | None) -> list[SourceOut]:
     best: dict[tuple[int, str], SourceOut] = {}
     with get_engine().connect() as conn:
         for query, vec in zip(queries, vectors):
-            for src in _search_one(conn, gemini.vector_to_literal(vec), document_id):
+            for src in _search_one(conn, gemini.vector_to_literal(vec), document_id, session_id):
                 key = (src.document_id, src.content)  # parent = clave de fusión
                 if key not in best or src.distance < best[key].distance:
                     best[key] = src
@@ -369,7 +376,7 @@ def fetch_document_blocks(document_id: int) -> list[str]:
 
 
 def resolve_summary_document(
-    question: str, document_id: int | None
+    question: str, document_id: int | None, session_id: int | None = None
 ) -> tuple[int, str] | None:
     """Resuelve QUÉ documento resumir usando metadatos, en este orden:
 
@@ -377,6 +384,7 @@ def resolve_summary_document(
     2. Filename mencionado en la pregunta (match case-insensitive).
     3. Documento ready más reciente ("resume el último documento que subí").
 
+    Con session_id, los candidatos se acotan a los documentos de la sesión.
     Devuelve (id, filename) o None si no hay candidato.
     """
     with get_engine().connect() as conn:
@@ -385,16 +393,21 @@ def resolve_summary_document(
                 text(
                     "SELECT id, filename FROM documents"
                     " WHERE id = :id AND status = 'ready'"
+                    " AND (CAST(:session_id AS INTEGER) IS NULL"
+                    "      OR session_id = CAST(:session_id AS INTEGER))"
                 ),
-                {"id": document_id},
+                {"id": document_id, "session_id": session_id},
             ).mappings().first()
             return (row["id"], row["filename"]) if row else None
         rows = list(
             conn.execute(
                 text(
                     "SELECT id, filename FROM documents WHERE status = 'ready'"
+                    " AND (CAST(:session_id AS INTEGER) IS NULL"
+                    "      OR session_id = CAST(:session_id AS INTEGER))"
                     " ORDER BY created_at DESC"
-                )
+                ),
+                {"session_id": session_id},
             ).mappings()
         )
     q = question.lower()
@@ -566,7 +579,7 @@ def build_multi_reduce_prompt(items: list[tuple[str, str]]) -> str:
     return _MULTI_REDUCE_PROMPT.format(items=joined, code_rules=_CODE_EXAMPLE_RULES)
 
 
-def summarize_documents(document_ids: list[int]) -> str:
+def summarize_documents(document_ids: list[int], session_id: int | None = None) -> str:
     """Resumen de VARIAS clases seleccionadas por el usuario (botón del chat
     con checkboxes / opción "todas").
 
@@ -574,6 +587,7 @@ def summarize_documents(document_ids: list[int]) -> str:
     la caché de documents.summary) y, si hay más de uno, un reduce final con
     el rol "gen" fusiona los resúmenes citando cada fuente. El resumen
     combinado NO se cachea: es una sola llamada sobre resúmenes ya cacheados.
+    Con session_id, la validación exige que los ids pertenezcan a la sesión.
 
     Lanza LookupError si la selección está vacía o algún documento no existe
     o no está listo.
@@ -583,6 +597,21 @@ def summarize_documents(document_ids: list[int]) -> str:
     if not ids:
         raise LookupError("selección de documentos vacía")
     if len(ids) == 1:
+        # Con session_id hay que validar pertenencia también en el atajo de
+        # un solo documento (la validación de abajo solo cubre el reduce).
+        if session_id is not None:
+            with get_engine().connect() as conn:
+                ok = conn.execute(
+                    text(
+                        "SELECT 1 FROM documents WHERE id = :id AND status = 'ready'"
+                        " AND session_id = CAST(:session_id AS INTEGER)"
+                    ),
+                    {"id": ids[0], "session_id": session_id},
+                ).first()
+            if not ok:
+                raise LookupError(
+                    f"documentos no disponibles (no existen o no están listos): {ids}"
+                )
         return summarize_document(ids[0])
 
     # Validar que todos existen y están ready antes de gastar llamadas,
@@ -590,7 +619,12 @@ def summarize_documents(document_ids: list[int]) -> str:
     with get_engine().connect() as conn:
         rows = list(
             conn.execute(
-                text("SELECT id, filename FROM documents WHERE status = 'ready'"),
+                text(
+                    "SELECT id, filename FROM documents WHERE status = 'ready'"
+                    " AND (CAST(:session_id AS INTEGER) IS NULL"
+                    "      OR session_id = CAST(:session_id AS INTEGER))"
+                ),
+                {"session_id": session_id},
             ).mappings()
         )
     names = {r["id"]: r["filename"] for r in rows}

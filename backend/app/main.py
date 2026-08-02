@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
 from .db import check_db
-from .routers import documents, query
+from .routers import documents, query, sessions
 
 # Los logs van a stderr → uvicorn los recoge en api.log (visibles con
 # `local-test.sh logs`). Sin esto, los errores de los endpoints solo
@@ -33,6 +33,7 @@ app.add_middleware(
 
 app.include_router(documents.router)
 app.include_router(query.router)
+app.include_router(sessions.router)
 
 
 @app.get("/health")

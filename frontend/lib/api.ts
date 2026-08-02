@@ -7,7 +7,15 @@ export type Doc = {
   gcs_uri: string;
   status: "pending" | "ready" | "error";
   title: string | null; // título auto-generado de la clase (null = pendiente)
+  session_id: number | null; // sesión (notebook) a la que pertenece
   created_at: string;
+};
+
+export type Session = {
+  id: number;
+  name: string;
+  created_at: string;
+  doc_count: number;
 };
 
 export type Source = {
@@ -24,15 +32,42 @@ export type QueryResponse = {
 
 const BASE = "/api";
 
-export async function listDocuments(): Promise<Doc[]> {
-  const res = await fetch(`${BASE}/documents`, { cache: "no-store" });
+export async function listSessions(): Promise<Session[]> {
+  const res = await fetch(`${BASE}/sessions`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`Error ${res.status} listando sesiones`);
+  return res.json();
+}
+
+export async function createSession(name: string): Promise<Session> {
+  const res = await fetch(`${BASE}/sessions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function deleteSession(id: number): Promise<void> {
+  const res = await fetch(`${BASE}/sessions/${id}`, { method: "DELETE" });
+  // El 400 de "última sesión" llega en el body: se muestra tal cual.
+  if (!res.ok) throw new Error(await res.text());
+}
+
+export async function listDocuments(sessionId?: number): Promise<Doc[]> {
+  const url =
+    sessionId === undefined
+      ? `${BASE}/documents`
+      : `${BASE}/documents?session_id=${sessionId}`;
+  const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) throw new Error(`Error ${res.status} listando documentos`);
   return res.json();
 }
 
-export async function uploadDocument(file: File): Promise<void> {
+export async function uploadDocument(file: File, sessionId: number): Promise<void> {
   const form = new FormData();
   form.append("file", file);
+  form.append("session_id", String(sessionId));
   const res = await fetch(`${BASE}/documents`, { method: "POST", body: form });
   if (!res.ok) throw new Error(await res.text());
 }
@@ -47,6 +82,7 @@ export async function ask(
   documentId?: number,
   summarize = false,
   documentIds?: number[],
+  sessionId?: number,
 ): Promise<QueryResponse> {
   const res = await fetch(`${BASE}/query`, {
     method: "POST",
@@ -56,6 +92,7 @@ export async function ask(
       document_id: documentId ?? null,
       document_ids: documentIds ?? null,
       summarize,
+      session_id: sessionId ?? null,
     }),
   });
   if (!res.ok) throw new Error(await res.text());

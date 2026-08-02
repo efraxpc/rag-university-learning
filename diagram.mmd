@@ -2,15 +2,15 @@ flowchart LR
     U([Usuario]) -->|"kubectl port-forward<br/>(sin Load Balancer)"| FE
 
     subgraph GKE["GKE Autopilot (regional, sin GPU)"]
-        FE["Next.js UI<br/>chat + subida de docs<br/>resumen multi-clase (checkboxes)"]
-        API["FastAPI orquestador<br/>/documents · /query<br/>retrieval · prompt augmentation · sanity checks"]
+        FE["Next.js UI<br/>home: sesiones (notebooks, CRUD)<br/>chat en /session/[id] · subida de docs<br/>resumen multi-clase (checkboxes)"]
+        API["FastAPI orquestador<br/>/sessions · /documents · /query<br/>retrieval · prompt augmentation · sanity checks"]
         JOB["K8s Job de chunking (Spot)<br/>extraer → limpiar → trocear"]
         FUSE[/"GCS FUSE CSI<br/>mount del bucket"/]
     end
 
     subgraph GCP["Servicios gestionados GCP"]
         GCS[("Cloud Storage<br/>documentos crudos")]
-        DB[("Cloud SQL PostgreSQL + pgvector<br/>IP privada · índice HNSW")]
+        DB[("Cloud SQL PostgreSQL + pgvector<br/>IP privada · índice HNSW<br/>sessions → documents (CASCADE)")]
         SM["Secret Manager<br/>API keys (Gemini · Anthropic)<br/>password DB"]
         GEM["Gemini API<br/>embeddings (siempre)<br/>+ generación si LLM_PROVIDER=gemini<br/>AI Studio free tier → Vertex AI"]
         OBS["Cloud Logging + Monitoring<br/>+ Query Insights"]
@@ -19,9 +19,9 @@ flowchart LR
     LLM["Motor de generación (Strategy por<br/>LLM_PROVIDER): Anthropic API directa<br/>(default) · Anthropic Vertex Model<br/>Garden · Google Gemini<br/>modelos por rol (gen/general/fast)<br/>en el catálogo de cada estrategia"]
 
     %% Flujo A: ingesta (bajo demanda)
-    FE -->|"POST /documents"| API
+    FE -->|"POST /documents (Form: session_id)"| API
     API -->|"1. guarda doc crudo"| GCS
-    API -->|"2. registra metadata (pending)"| DB
+    API -->|"2. registra metadata (pending, session_id)"| DB
     API -->|"3. crea Job"| JOB
     JOB --- FUSE
     FUSE -->|"4. lee doc"| GCS
@@ -29,7 +29,7 @@ flowchart LR
     JOB -->|"6. inserta chunks + vectores (ready)"| DB
 
     %% Flujo B: consulta (tiempo real)
-    FE -->|"POST /query"| API
+    FE -->|"POST /query (session_id acota la sesión)"| API
     API -->|"7. embed de la pregunta"| GEM
     API -->|"8. búsqueda híbrida top-k<br/>HNSW + filtros metadata"| DB
     DB -->|"chunks + fuentes"| API

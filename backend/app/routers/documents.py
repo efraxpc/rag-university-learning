@@ -9,12 +9,13 @@ import threading
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, UploadFile
+from fastapi import APIRouter, Form, HTTPException, UploadFile
 from sqlalchemy import text
 
 from .. import rag
 from ..config import settings
 from ..db import get_engine
+from ..files import delete_physical_file
 from ..schemas import DocumentOut
 
 logger = logging.getLogger("rag.documents")
@@ -27,19 +28,29 @@ ALLOWED_EXTENSIONS = {".pdf", ".txt", ".md", ".ipynb", ".vtt"}
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
-def _insert_document(filename: str, uri: str) -> int:
+def _insert_document(filename: str, uri: str, session_id: int) -> int:
     try:
         with get_engine().begin() as conn:
             return conn.execute(
                 text(
-                    "INSERT INTO documents (filename, gcs_uri, status) "
-                    "VALUES (:f, :u, 'pending') RETURNING id"
+                    "INSERT INTO documents (filename, gcs_uri, session_id, status) "
+                    "VALUES (:f, :u, :s, 'pending') RETURNING id"
                 ),
-                {"f": filename, "u": uri},
+                {"f": filename, "u": uri, "s": session_id},
             ).scalar_one()
     except Exception as exc:
         logger.exception("Error registrando el documento %s", filename)
         raise HTTPException(502, f"Error registrando el documento: {exc}") from exc
+
+
+def _check_session_exists(session_id: int) -> None:
+    """404 si la sesión destino del upload no existe."""
+    with get_engine().connect() as conn:
+        exists = conn.execute(
+            text("SELECT 1 FROM sessions WHERE id=:s"), {"s": session_id}
+        ).scalar()
+    if exists is None:
+        raise HTTPException(404, f"Sesión {session_id} no encontrada.")
 
 
 def _set_status(doc_id: int, status: str) -> None:
@@ -85,9 +96,10 @@ def _run_chunker_local(doc_id: int, object_name: str, docs_dir: Path) -> str:
 
 
 @router.post("", status_code=202)
-def upload_document(file: UploadFile) -> dict:
+def upload_document(file: UploadFile, session_id: int = Form(...)) -> dict:
     """Flujo A (ingesta): doc crudo → metadata pending → chunking.
 
+    El documento queda asociado a la sesión indicada (debe existir).
     - Con BUCKET_NAME (GCP): sube a Cloud Storage y crea el Job de K8s.
     - Sin BUCKET_NAME (local): guarda en disco y lanza el chunker como proceso.
     """
@@ -95,6 +107,7 @@ def upload_document(file: UploadFile) -> dict:
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(400, f"Extensión no soportada ({ext}). Usa: {sorted(ALLOWED_EXTENSIONS)}")
 
+    _check_session_exists(session_id)
     object_name = f"uploads/{uuid.uuid4().hex}-{file.filename}"
 
     if settings.bucket_name:
@@ -107,7 +120,7 @@ def upload_document(file: UploadFile) -> dict:
             logger.exception("Error subiendo %s a Cloud Storage", file.filename)
             raise HTTPException(502, f"Error subiendo a Cloud Storage: {exc}") from exc
         uri = f"gs://{settings.bucket_name}/{object_name}"
-        doc_id = _insert_document(file.filename or object_name, uri)
+        doc_id = _insert_document(file.filename or object_name, uri, session_id)
         try:
             from ..k8s_jobs import create_chunker_job
 
@@ -128,7 +141,7 @@ def upload_document(file: UploadFile) -> dict:
     except Exception as exc:
         logger.exception("Error guardando el fichero local %s", file.filename)
         raise HTTPException(500, f"Error guardando el fichero local: {exc}") from exc
-    doc_id = _insert_document(file.filename or object_name, f"local://{dest}")
+    doc_id = _insert_document(file.filename or object_name, f"local://{dest}", session_id)
     try:
         job_name = _run_chunker_local(doc_id, object_name, docs_dir)
     except Exception as exc:
@@ -139,14 +152,18 @@ def upload_document(file: UploadFile) -> dict:
 
 
 @router.get("")
-def list_documents() -> list[DocumentOut]:
+def list_documents(session_id: int | None = None) -> list[DocumentOut]:
     try:
         with get_engine().connect() as conn:
             rows = list(conn.execute(
                 text(
-                    "SELECT id, filename, gcs_uri, status, title, created_at "
-                    "FROM documents ORDER BY created_at DESC LIMIT 100"
-                )
+                    "SELECT id, filename, gcs_uri, session_id, status, title, created_at "
+                    "FROM documents "
+                    "WHERE CAST(:session_id AS INTEGER) IS NULL "
+                    "   OR session_id = CAST(:session_id AS INTEGER) "
+                    "ORDER BY created_at DESC LIMIT 100"
+                ),
+                {"session_id": session_id},
             ).mappings())
     except Exception as exc:
         logger.exception("Error consultando la base de datos")
@@ -187,26 +204,6 @@ def _kickoff_title_generation(rows: list) -> None:
         ).start()
 
 
-def _delete_physical_file(uri: str, doc_id: int) -> None:
-    """Borrado físico best-effort: si falla, la DB ya es consistente y solo
-    queda un fichero/blob huérfano (se loguea warning, no rompe el 204)."""
-    try:
-        if uri.startswith("local://"):
-            Path(uri[len("local://"):]).unlink(missing_ok=True)
-        elif uri.startswith("gs://"):
-            from google.cloud import storage
-
-            bucket_name, _, object_name = uri[len("gs://"):].partition("/")
-            storage.Client(project=settings.project_id or None).bucket(
-                bucket_name
-            ).blob(object_name).delete()
-    except Exception:
-        logger.warning(
-            "No se pudo borrar el fichero físico %s (document_id=%s); queda huérfano",
-            uri, doc_id, exc_info=True,
-        )
-
-
 @router.delete("/{doc_id}", status_code=204)
 def delete_document(doc_id: int) -> None:
     """Borra un documento, sus chunks y parents (ON DELETE CASCADE) y el
@@ -229,5 +226,5 @@ def delete_document(doc_id: int) -> None:
         logger.exception("Error borrando el documento %s", doc_id)
         raise HTTPException(502, f"Error borrando el documento: {exc}") from exc
 
-    _delete_physical_file(uri, doc_id)
+    delete_physical_file(uri, doc_id)
     logger.info("Documento %s borrado (uri=%s)", doc_id, uri)

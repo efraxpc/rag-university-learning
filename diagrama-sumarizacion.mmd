@@ -1,15 +1,17 @@
 %% Sumarización de clase entera por metadatos (map-reduce + caché), con
 %% selección múltiple de clases (checkboxes del chat, incluida "todas").
+%% El chat envía session_id: la validación y la resolución de documentos se
+%% acotan a los documentos de esa sesión (tabla sessions, ver init_db.sql).
 %% Rama del flujo B (POST /query) implementada en backend/app/rag.py y
 %% backend/app/routers/query.py. Renderizable con Mermaid (flowchart TD).
 flowchart TD
-    A["Usuario: botón ✨ Resumir clase<br/>(checkboxes: 1..N clases o 'todas las clases')<br/>o pregunta con keywords ('resume', 'de qué trata'…)"] --> B["POST /query<br/>question + document_ids / document_id + summarize"]
+    A["Usuario: botón ✨ Resumir clase<br/>(checkboxes: 1..N clases o 'todas las clases')<br/>o pregunta con keywords ('resume', 'de qué trata'…)"] --> B["POST /query<br/>question + document_ids / document_id + summarize<br/>+ session_id (acota todo a la sesión del chat)"]
     B --> C{"routers/query.py<br/>¿summarize=true o<br/>is_summary_request()?"}
     C -- "No" --> Z["Flujo RAG normal<br/>(rewrite + expansión → HNSW top-k → LLM)"]
     C -- "Sí" --> D0{"¿document_ids<br/>(selección del chat)?"}
 
     %% Rama multi-documento (selección del usuario)
-    D0 -- "Sí (1..N)" --> MS["summarize_documents(ids)<br/>valida que todos estén ready<br/>(si no: HTTP 404)"]
+    D0 -- "Sí (1..N)" --> MS["summarize_documents(ids, session_id)<br/>valida que todos estén ready y, si viene<br/>session_id, que pertenezcan a la sesión<br/>(si no: HTTP 404)"]
     MS --> MS1{"¿Cuántos<br/>documentos?"}
     MS1 -- "1" --> F
     MS1 -- "N" --> MP["Resumen POR DOCUMENTO en paralelo<br/>(ThreadPoolExecutor, caché o map-reduce<br/>de cada uno, ver rama inferior)"]
@@ -17,7 +19,7 @@ flowchart TD
     MR --> P
 
     %% Rama single-documento (por metadatos)
-    D0 -- "No" --> D["resolve_summary_document()<br/>1) document_id explícito<br/>2) filename mencionado en la pregunta<br/>3) documento ready más reciente"]
+    D0 -- "No" --> D["resolve_summary_document(question, doc_id, session_id)<br/>1) document_id explícito<br/>2) filename mencionado en la pregunta<br/>3) documento ready más reciente<br/>(con session_id: solo docs de la sesión)"]
     D --> E{"¿Documento<br/>resuelto?"}
     E -- "No (keyword)" --> Z
     E -- "No (botón)" --> E400["HTTP 400<br/>'Indica qué documento resumir'"]
