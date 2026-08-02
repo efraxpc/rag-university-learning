@@ -310,6 +310,8 @@ with EXACTLY these headings:
 Mandatory rules:
 - Remove duplicates and keep a logical order; do not add outside knowledge.
 - Short sentences and simple words, for students with basic knowledge.
+- Keep sections 1-4 CONCISE so that section 5 (the code example) fits
+  complete in the answer.
 - Cite the source document in brackets, e.g. [Documento: {filename}].
 
 Document: {filename}
@@ -333,6 +335,10 @@ these headings:
 Mandatory rules:
 - Remove duplicates and keep a logical order; do not add outside knowledge.
 - Short sentences and simple words, for students with basic knowledge.
+- Keep sections 1-4 CONCISE so that section 5 (the code example) fits
+  complete in the answer.
+- Section 5 must be ONE NEW unified code example that ties the concepts
+  together — do NOT copy the per-document code examples.
 - Cite the source document of each point in brackets, e.g.
   [Documento: clase1.pdf].
 - If two documents cover the same topic, merge the content and cite both.
@@ -523,7 +529,8 @@ def summarize_document(document_id: int) -> str:
 
     if len(groups) == 1:
         summary = llm.generate(
-            build_summary_prompt(row["filename"], groups[0], final=True)
+            build_summary_prompt(row["filename"], groups[0], final=True),
+            max_tokens=settings.summary_max_output_tokens,
         )
     else:
         # Map con FAST_MODEL (volumen barato); reduce con GEN_MODEL (calidad).
@@ -537,7 +544,10 @@ def summarize_document(document_id: int) -> str:
                     groups,
                 )
             )
-        summary = llm.generate(build_reduce_prompt(row["filename"], partials))
+        summary = llm.generate(
+            build_reduce_prompt(row["filename"], partials),
+            max_tokens=settings.summary_max_output_tokens,
+        )
 
     with get_engine().begin() as conn:
         conn.execute(
@@ -595,7 +605,10 @@ def summarize_documents(document_ids: list[int]) -> str:
     items = [(names[i], s) for i, s in zip(ids, summaries)]
 
     logger.info("resumen multi-documento: %d clases → reduce final", len(ids))
-    return llm.generate(build_multi_reduce_prompt(items))
+    return llm.generate(
+        build_multi_reduce_prompt(items),
+        max_tokens=settings.summary_max_output_tokens,
+    )
 
 
 def sanity_check(answer: str, sources: list[SourceOut]) -> str:

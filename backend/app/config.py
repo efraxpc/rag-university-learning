@@ -73,6 +73,11 @@ class Settings(BaseSettings):
     max_distance: float = 0.6
     # 4096: las explicaciones estructuradas con código necesitan más tokens.
     max_output_tokens: int = 4096
+    # Presupuesto mayor para las llamadas que producen el RESUMEN FINAL de
+    # clase (caso 1 grupo y los reduces): fusionan resúmenes largos y deben
+    # dejar sitio a la sección "Ejemplo de código"; con 4096 la respuesta se
+    # truncaba a media frase antes de llegar a ella.
+    summary_max_output_tokens: int = 8192
 
     # Resumen de clase entera (map-reduce por metadatos, ver rag.py).
     # Tamaño de bloque del map en caracteres (~6-8k tokens: seguro y rápido

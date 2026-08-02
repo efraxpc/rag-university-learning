@@ -70,18 +70,25 @@ def get_client() -> Anthropic | AnthropicVertex:
     return client
 
 
-def generate(prompt: str, model: str | None = None) -> str:
+def generate(prompt: str, model: str | None = None, max_tokens: int | None = None) -> str:
     """Genera texto con la Messages API de Anthropic. `model` permite usar
     otro modelo distinto de GEN_MODEL (p. ej. FAST_MODEL para llamadas
-    auxiliares o GENERAL_MODEL para el conocimiento general)."""
+    auxiliares o GENERAL_MODEL para el conocimiento general) y `max_tokens`
+    otro presupuesto de salida (p. ej. SUMMARY_MAX_OUTPUT_TOKENS para los
+    resúmenes finales, más largos que una respuesta de chat)."""
     res = get_client().messages.create(
         model=model or settings.gen_model,
-        max_tokens=settings.max_output_tokens,
+        max_tokens=max_tokens or settings.max_output_tokens,
         messages=[{"role": "user", "content": prompt}],
     )
     if res.stop_reason == "refusal":  # posible en Fable 5 (Covered Model)
         logger.warning("el modelo %r rechazó la generación (refusal)", res.model)
         return ""
+    if res.stop_reason == "max_tokens":  # respuesta cortada a media frase
+        logger.warning(
+            "la generación con %r se TRUNCÓ por max_tokens (%s)",
+            res.model, max_tokens or settings.max_output_tokens,
+        )
     return "".join(b.text for b in res.content if b.type == "text")
 
 
